@@ -1,0 +1,38 @@
+name = "calc-sandbox"
+goal = "calc.py arithmetic behaves as test_calc.py specifies."
+workdir = "."
+
+# Brain outside: loopctl and pi run on the host, holding the goal, limits and undo.
+# Hands inside: every check runs agent-written code in a throwaway VM via ./incvm
+# (read-only copy of a fresh clone, no network, deleted afterwards).
+actor = 'pi -p "$(cat)"'
+actor_timeout_s = 600
+
+fresh_clone = true
+
+[[checks]]
+name = "add"
+run = "./incvm python3 -m unittest -q test_calc.TestCalc.test_add"
+
+[[checks]]
+name = "sub"
+run = "./incvm python3 -m unittest -q test_calc.TestCalc.test_sub"
+
+[[checks]]
+name = "mul"
+run = "./incvm python3 -m unittest -q test_calc.TestCalc.test_mul"
+
+[[checks]]
+name = "div"
+run = "./incvm python3 -m unittest -q test_calc.TestCalc.test_div"
+
+[[admission]]
+name = "tests-unchanged"
+run = "git diff --cached --quiet -- test_calc.py incvm"
+
+[limits]
+max_iterations = 8
+max_actor_seconds = 900
+max_diff_lines = 20
+stall_iterations = 3
+max_regressions = 2

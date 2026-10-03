@@ -16,7 +16,9 @@ observe ──► diff ──► act (1 target) ──► admit ──► commit
 ## Quick start
 
 ```bash
-./examples/calc/demo.sh          # offline demo with a deterministic actor
+./examples/calc/demo.sh                     # offline demo with a deterministic actor
+./examples/calc/demo.sh loop.pi.toml        # pi as the actor
+./examples/calc/demo.sh loop.sandbox.toml   # pi as the actor, checks inside Apple container VMs
 pip install -e .                 # or: PYTHONPATH=. python3 -m loopctl ...
 loopctl run path/to/loop.toml
 ```
@@ -38,7 +40,7 @@ Exit codes: `0` converged, `1` error, `2` unreachable, `3` thrashing, `4` budget
 name = "calc"
 goal = "calc.py arithmetic behaves as test_calc.py specifies."
 workdir = "."                      # must be inside a git repo with ≥1 commit
-actor = "claude -p --permission-mode acceptEdits"
+actor = 'pi -p "$(cat)"'          # prompt arrives on stdin; "$(cat)" passes it as an argument
 actor_timeout_s = 600
 fresh_clone = true                 # observe a fresh clone of HEAD (no stale local state)
 require_approval = false           # y/N prompt before each commit; denied without a TTY
@@ -68,6 +70,24 @@ The actor is any shell command run in `workdir`. It gets a prompt on stdin and t
 `LOOP_NAME`, `LOOP_GOAL`, `LOOP_WORKDIR`, `LOOP_ITERATION`, `LOOP_TARGET`, `LOOP_TARGET_CMD`,
 `LOOP_TARGET_OUTPUT`, `LOOP_FAILING` (JSON list). It edits files and exits 0. It must not commit.
 Non-zero exit = rejected action.
+
+### Using an agent harness
+
+loopctl calls the agent; the agent doesn't need a plugin. Any CLI with a one-shot mode works:
+
+```toml
+actor = 'pi -p "$(cat)"'                              # pi
+actor = 'claude -p --permission-mode acceptEdits "$(cat)"'   # Claude Code
+```
+
+### Sandboxing checks (brain outside, hands inside)
+
+Checks run code the agent just wrote. `examples/calc/incvm` runs one check in a throwaway
+[Apple container](https://github.com/apple/container) VM: the check's directory is mounted
+read-only at `/work`, there is no network, and the VM is deleted afterwards. The exit code passes
+through, so a check is just `run = "./incvm python3 -m unittest ..."`. loopctl itself stays on the
+host, so the agent can't change its own grading. Needs Apple Silicon; each check pays one VM
+boot (~1s). Image: `INCVM_IMAGE` (default `python:3.12-slim`).
 
 ## Post → code
 

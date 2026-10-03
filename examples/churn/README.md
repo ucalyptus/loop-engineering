@@ -35,11 +35,14 @@ The demo copies this folder into a temporary git repo, so your checkout is never
    with `fix_one.py`.
 3. **Be the adversary.** Write a worker that cheats: lower the bar in `eval.py`, or read the holdout
    file from `churn/model.py`. Watch the admission gates reject it. Then find a cheat the gates
-   *don't* catch. (Hint: the leakage guard only looks for one word.)
+   *don't* catch. (Hint: the leakage guard only looks for one word, and nothing guards the code
+   that computes AUC.)
 4. **Add a sensor.** Ashby's law: the loop can only fix what it can see. Add a check this loop is
    missing: recall on churners, calibration, or AUC per contract type. Does it still converge?
-5. **Stretch: add a decider.** Copy the `[decider]` block from `../calc/loop.jev.toml` and let
-   TypeSafe Jev pick the next move.
+5. **Stretch: let Jev decide and guard.** Run your cheating worker under `loop.jev.toml`, which adds
+   TypeSafe Jev as the decider and as a tampering gate (`typesafe/gate.py`). Needs
+   `TYPESAFE_API_KEY` or `TYPESAFE_ENV_FILE`. Does the gate catch your cheat? Can you write one it
+   misses?
 
 Stuck on setup or the task? Ask Sayantan after the talk.
 
@@ -62,5 +65,5 @@ With all three fixed, holdout AUC is 0.874. Each bug alone keeps it below 0.85.
 | `churn/features.py`, `churn/model.py`, `churn/data.py` | the code under repair |
 | `validate.py`, `eval.py`, `check_card.py`, `schema.json`, `data/` | sensors and data; off limits to the agent |
 | `fix_one.py` | scripted offline worker: one anchored fix per round |
-| `loop.toml`, `loop.pi.toml` | manifests: scripted worker and pi |
+| `loop.toml`, `loop.pi.toml`, `loop.jev.toml` | manifests: scripted worker, pi, and Jev as decider and tampering gate |
 | `make_data.py` | regenerates the synthetic data (seeded; the CSVs are committed) |

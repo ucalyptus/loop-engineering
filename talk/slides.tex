@@ -444,7 +444,8 @@ write /work: blocked Read-only file system
   \vspace{0.1cm}
   \begin{itemize}
     \item One line of shell in an admission webhook blocks this Goodhart attack.
-    \item A second gate blocks model code that reads the holdout set (\texttt{no-holdout-in-model-code}).
+    \item Plain-text gates miss subtle cheats: an AUC floor in model code went through to ``converged''.
+    \item A Jev gate asks typed questions about the diff and rejected that cheat (tampering 0.81). Honest fixes scored 0.14 or less.
     \item The loop stops and does not ship a false pass.
   \end{itemize}
 \end{frame}
@@ -471,7 +472,7 @@ write /work: blocked Read-only file system
     \end{column}
     \begin{column}{0.46\textwidth}
       \begin{block}{TypeSafe Jev}
-        Jev answers typed questions with probabilities, not free text. loopctl sends one request per round:
+        Jev answers typed questions with probabilities, not free text. Each round, loopctl asks two questions:
         \begin{itemize}
           \item move: act / ask a human / stop
           \item target: which failing check next
@@ -480,7 +481,7 @@ write /work: blocked Read-only file system
     \end{column}
   \end{columns}
   \vspace{0.2cm}
-  \small Guardrails: the decider cannot judge pass or fail, and it cannot pick a passing check. Under 50\% confidence, it asks a human. If it fails, loopctl uses the simple rule.
+  \small Guardrails: the decider cannot judge pass or fail, and it cannot pick a passing check. It asks Jev three times. Under 60\% confidence, or if the answers disagree, it asks a human. If it fails, loopctl uses the simple rule.
 \end{frame}
 
 \begin{frame}[fragile]{Rules vs.\ Jev: an impossible check listed first}
@@ -502,20 +503,20 @@ unreachable: no progress in 3 iterations
     \begin{column}{0.61\textwidth}
       \textbf{Jev decider}
 \begin{lstlisting}[style=termsm]
-decide: act `add` (0.98)
-  target add=0.67 div=0.22 sub=0.09 gpu=0.02
-committed 22ef9645
-decide: act `sub` (0.98)
-  target sub=0.90 div=0.10 gpu=0.00
-committed 6f7b3f5c
-decide: act `div` (0.96)
-  target div=1.00 gpu=0.00
-committed 3d5f5a34
-decide: stop `gpu` (0.97)
-  stop=0.99 ask_human=0.01 act=0.00
+decide: act `add` (0.99)
+  act×3 over 3 asks; target add×3
+committed 80d120cd
+decide: act `sub` (0.99)
+  act×3 over 3 asks; target sub×3
+committed b732c79a
+decide: act `div` (0.98)
+  act×3 over 3 asks; target div×3
+committed 42706960
+decide: stop `gpu` (0.99)
+  stop×3 over 3 asks
 unreachable: decider chose stop
 \end{lstlisting}
-      \small Jev fixed \textbf{3 of 3}, then stopped. The run took about 3\,s.
+      \small Jev fixed \textbf{3 of 3}, then stopped. All three asks agreed every round. The run took about 3\,s.
     \end{column}
   \end{columns}
 \end{frame}

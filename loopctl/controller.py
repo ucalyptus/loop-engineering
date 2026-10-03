@@ -38,6 +38,7 @@ EXIT_CODES = {
     "needs_human": NEEDS_HUMAN,
 }
 OUTPUT_TAIL = 4000
+ADMISSION_REVIEW = 10  # admission hook exit code: "a human should look"; no TTY or "no" => reject
 
 
 class LoopError(RuntimeError):
@@ -191,10 +192,15 @@ def admit(m: Manifest, git: Git, outside_before: set[str], target: str, ask: Cal
     lines = git.stage()
     if lines > m.limits.max_diff_lines:
         return Gate(False, f"diff_too_large: {lines} > {m.limits.max_diff_lines} lines", lines)
+    env = {**os.environ, "LOOP_NAME": m.name, "LOOP_GOAL": m.goal, "LOOP_TARGET": target}
     for hook in m.admission:
-        code, out = _sh(hook.run, m.workdir, hook.timeout_s)
-        if code != 0:
-            return Gate(False, f"admission[{hook.name}]: {_tail(out, 500).strip() or f'exit {code}'}", lines)
+        code, out = _sh(hook.run, m.workdir, hook.timeout_s, env=env)
+        detail = _tail(out, 500).strip() or f"exit {code}"
+        if code == ADMISSION_REVIEW:
+            if not ask(f"admission[{hook.name}] wants a human review:\n{detail}\nAdmit this change? [y/N] "):
+                return Gate(False, f"admission[{hook.name}]: needs review: {detail}", lines)
+        elif code != 0:
+            return Gate(False, f"admission[{hook.name}]: {detail}", lines)
     if m.require_approval and not ask(f"Target `{target}`, {lines} changed lines:\n{git.stat()}\nApprove commit? [y/N] "):
         return Gate(False, "approval_denied", lines)
     return Gate(True, "", lines)

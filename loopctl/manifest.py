@@ -42,7 +42,7 @@ class Decider:
     """
 
     run: str  # command: JSON state on stdin, JSON decision on stdout
-    min_confidence: float = 0.5  # below this, the move goes to a human
+    min_confidence: float = 0.6  # below this, the move goes to a human (TypeSafe cookbook threshold)
     timeout_s: float = 30.0
 
 
@@ -130,7 +130,7 @@ def _decider(raw: object) -> Decider | None:
     unknown = set(raw) - set(Decider.__dataclass_fields__)
     if unknown:
         raise ManifestError(f"unknown [decider] keys: {sorted(unknown)}")
-    d = Decider(str(raw["run"]), float(raw.get("min_confidence", 0.5)), float(raw.get("timeout_s", 30.0)))
+    d = Decider(str(raw["run"]), float(raw.get("min_confidence", 0.6)), float(raw.get("timeout_s", 30.0)))
     if not 0 <= d.min_confidence <= 1:
         raise ManifestError("[decider] min_confidence must be between 0 and 1")
     return d

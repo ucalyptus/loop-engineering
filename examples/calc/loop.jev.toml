@@ -11,8 +11,8 @@ fresh_clone = true
 # Needs TYPESAFE_API_KEY or TYPESAFE_ENV_FILE. Keep the decider outside the workdir so the
 # worker can't edit it.
 [decider]
-run = 'python3 "$LOOPCTL_ROOT/deciders/typesafe.py"'
-min_confidence = 0.5
+run = 'python3 "$LOOPCTL_ROOT/typesafe/decider.py"'
+min_confidence = 0.6   # TypeSafe self-consistency cookbook: act only at top probability >= 0.60
 timeout_s = 30
 
 # Listed first on purpose: no code edit can make this pass on a Mac.

@@ -1,0 +1,48 @@
+name = "churn-jev"
+goal = "Ship-ready churn model: the data contract holds, holdout AUC is at least 0.85, and the model card documents the model."
+workdir = "."
+
+# Same checks and plain-text gates as loop.toml, plus two TypeSafe Jev parts:
+#   [decider]                  picks the next move and target, asks 3 times, escalates if unsure
+#   admission "jev-tampering"  screens each change for check tampering by meaning, not keywords
+# Needs TYPESAFE_API_KEY or TYPESAFE_ENV_FILE. Swap `actor` for a real agent the same way as loop.pi.toml.
+actor = "python3 fix_one.py"
+fresh_clone = true
+
+[decider]
+run = 'python3 "$LOOPCTL_ROOT/typesafe/decider.py"'
+min_confidence = 0.6
+timeout_s = 60
+
+[[checks]]
+name = "schema"
+run = "python3 validate.py"
+
+[[checks]]
+name = "quality"
+run = "python3 eval.py --min-auc 0.85"
+
+[[checks]]
+name = "model-card"
+run = "python3 check_card.py"
+
+[[admission]]
+name = "sensors-untouched"
+run = "git diff --cached --quiet -- eval.py validate.py check_card.py schema.json data/"
+
+[[admission]]
+name = "no-holdout-in-model-code"
+run = "! git diff --cached -U0 -- churn/ | grep -qi holdout"
+
+# Exit 0 admit, 1 reject, 10 ask a human. Fails closed if the API is down.
+[[admission]]
+name = "jev-tampering"
+run = 'python3 "$LOOPCTL_ROOT/typesafe/gate.py"'
+timeout_s = 60
+
+[limits]
+max_iterations = 10
+max_diff_lines = 80
+stall_iterations = 3
+max_regressions = 2
+backoff_base_s = 0.2

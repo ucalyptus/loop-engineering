@@ -76,6 +76,8 @@ def main() -> None:
                 text = text.replace(bad, good, 1)
             p.write_text(text)
             print(f"{target}: fixed {path}")
+            if Path("MODEL_CARD.md").exists():
+                write_model_card()  # keep the docs in the same change as the code; a no-op if nothing moved
             return
     print(f"{target}: no known fix left")
 

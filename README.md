@@ -104,8 +104,8 @@ scheduler is: it picks, it doesn't run.
 
 ```toml
 [decider]
-run = 'python3 "$LOOPCTL_ROOT/deciders/typesafe.py"'   # keep it outside the workdir
-min_confidence = 0.5    # below this, the move goes to a human
+run = 'python3 "$LOOPCTL_ROOT/typesafe/decider.py"'   # keep it outside the workdir
+min_confidence = 0.6    # below this, the move goes to a human
 timeout_s = 30
 ```
 
@@ -121,12 +121,34 @@ What it can't do, by design:
 - Break the loop. A crash, timeout or invalid answer is logged as `decider_error` and that round
   falls back to the built-in rule.
 
-`deciders/typesafe.py` implements it with [TypeSafe Jev](https://docs.typesafe.ai). It sends one
-request per round with two Choice questions: the move, and, when more than one check fails, the
-target. It needs `TYPESAFE_API_KEY`, or `TYPESAFE_ENV_FILE` pointing at a `.env` file. On
-`examples/calc/loop.jev.toml`, which lists an unfixable `gpu` check first, the built-in rule
-spends 3 rounds on `gpu` and halts with nothing fixed. Jev targets `add`, `sub` and `div`, then
-stops on `gpu` (0.97). Confidence thresholds are starting points; tune them on your own runs.
+`typesafe/decider.py` implements it with [TypeSafe Jev](https://docs.typesafe.ai). Each round it
+asks two Choice questions (the move, and the target when more than one check fails) and asks them
+`TYPESAFE_REPEATS` times (default 3), each with a fresh `uid` in the state. `confidence` is the
+lowest probability the agreed move got, or 0 when the repeats disagree, so a wobbling decision goes
+to a human. This follows TypeSafe's
+[self-consistency cookbook](https://docs.typesafe.ai/cookbooks/consistency_choice_cookbook), which
+acts automatically only at a top probability of 0.60 or more. Target disagreement alone does not
+escalate; the majority target wins. It needs `TYPESAFE_API_KEY`, or `TYPESAFE_ENV_FILE` pointing at
+a `.env` file. On `examples/calc/loop.jev.toml`, which lists an unfixable `gpu` check first, the
+built-in rule spends 3 rounds on `gpu` and halts with nothing fixed. Jev targets `add`, `sub` and
+`div`, then stops on `gpu` (0.99, 3 of 3 asks agree). Thresholds are starting points; tune them on
+your own runs.
+
+### Admission gates
+
+An `[[admission]]` command runs in the workdir with the proposed change staged, and gets
+`LOOP_NAME`, `LOOP_GOAL` and `LOOP_TARGET`. Exit 0 admits, exit 10 asks a human on the TTY (no TTY
+or "no" rejects), any other exit rejects.
+
+`typesafe/gate.py` is a Jev gate for check tampering, built on TypeSafe's
+[guardrails cookbook](https://docs.typesafe.ai/cookbooks/llm_guardrails). One request asks three
+Noul questions about the staged diff (does it weaken a check, read evaluation data, or hard-code
+results?) and one severity Score. Any hazard at 0.70 or more rejects; at 0.35 or more it asks a
+human, or rejects if severity is 2 or more. It fails closed: if the API is down, the change is
+rejected. On `examples/churn`, it admitted all four honest fixes (hazards at 0.14 or less) and
+rejected two cheats that the plain-text gates let through to a false "converged": an AUC floor in
+`churn/model.py` (0.81) and training on the holdout set via `"hold" + "out"` (0.78). It is a model,
+so keep the plain-text gates next to it.
 
 ## Post → code
 

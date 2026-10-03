@@ -20,7 +20,7 @@
 
 \author[Sayantan Das]{Sayantan Das}
 \title[Loop Engineering is just K8s-style Cybernetics]{Loop Engineering is just K8s-style Cybernetics}
-\subtitle{From Watt's governor to Kubernetes to coding agents}
+\subtitle{One control loop in Watt's governor, Kubernetes and coding agents}
 % Short institute = what the footer shows bottom right: the MLOps North logo.
 \institute[\raisebox{-0.45ex}{\includegraphics[height=2.4ex]{pic/mlops-north.png}}]{MLOps North}
 \date{November 5, 2026}
@@ -88,9 +88,9 @@
       \small
       \begin{itemize}
         \item {\greekfont κυβερνήτης} (\emph{kybernētēs}): the steersman of a ship
-        \item \textbf{1948}: Norbert Wiener names the science of feedback and control \alert{cybernetics} after it
-        \item \textbf{2014}: Google open-sources a container orchestrator and names it \alert{Kubernetes}: Greek for helmsman
-        \item \textbf{2025}: we put a language model in the loop and call it \alert{loop engineering}
+        \item \textbf{1948}: Norbert Wiener names the science of feedback and control \alert{cybernetics} after this word
+        \item \textbf{2014}: Google releases a container orchestrator as open source and names it \alert{Kubernetes}, Greek for helmsman
+        \item \textbf{2025}: engineers put a language model in the loop and call the practice \alert{loop engineering}
       \end{itemize}
     \end{column}
     \begin{column}{0.32\textwidth}
@@ -100,7 +100,7 @@
   \end{columns}
   \vspace{0.2cm}
   \begin{block}{Claim}
-    This is not an analogy. It is the same machine at a higher level: \textbf{state a goal, sense, compare, act, repeat.}
+    Loop engineering uses the machine from Watt's governor and Kubernetes at a higher level: \textbf{state a goal, sense, compare, act, repeat.}
   \end{block}
 \end{frame}
 
@@ -109,7 +109,7 @@
   \includegraphics[width=0.9\linewidth]{pic/eras.png}
   \vspace{0.2cm}
 
-  \small Each era moves the human \textbf{up one level}: from turning the valve to designing the governor.
+  \small In each era, the human moves up one level: the worker who turned the valve now \textbf{designs the governor}.
 \end{frame}
 
 % =====================================================================
@@ -139,7 +139,7 @@
     \toprule
      & \textbf{Goal} & \textbf{Sensor} & \textbf{Comparator} & \textbf{Actuator} \\
     \midrule
-    Watt governor (1788) & target speed & spinning balls & linkage & steam valve \\
+    Watt governor (1788) & target speed & flyball weights & linkage & steam valve \\
     Thermostat & 21\,°C & thermometer & switch & furnace \\
     Kubernetes (2014) & YAML manifest & API server watch & controller diff & controller writes \\
     Agent loop (2025) & task spec + checks & tests, logs, browser & diff vs. goal & LLM edits code \\
@@ -148,7 +148,7 @@
 \end{frame}
 
 \begin{frame}{How control loops fail: Maxwell, \emph{On Governors} (1868)}
-  Governors on steam engines \alert{hunted}: they overshot, corrected, overshot again. Maxwell's paper on why is one of the founding texts of control theory.
+  Steam-engine governors \alert{hunted}: they overshot the target speed, corrected, and overshot again. Maxwell explained the cause in 1868, and his paper is one of the first texts of control theory.
   \vspace{0.3cm}
 
   \footnotesize
@@ -156,28 +156,28 @@
     \toprule
     \textbf{Control term} & \textbf{What it means} & \textbf{In an agent loop} \\
     \midrule
-    Negative feedback & push against the error & undo a change that made things worse \\
-    Damping & slow down after overshooting & smaller changes, wait longer after a miss \\
-    Oscillation (hunting) & overshoot, correct, repeat & fix one test, break two, fix those\dots \\
-    Steady-state error & settles short of the goal & stuck: the agent can't close the last gap \\
-    Saturation limits & the valve only opens so far & caps on rounds, time and money \\
+    Negative feedback & push against the error & undo a change that made the result worse \\
+    Damping & slow down after an overshoot & make smaller changes, and wait longer after a miss \\
+    Oscillation (hunting) & overshoot, correct, repeat & fix one test, break two, and repeat \\
+    Steady-state error & stop short of the goal & the agent cannot close the last gap \\
+    Saturation limits & the valve has a maximum opening & limits on rounds, time and money \\
     \bottomrule
   \end{tabular}
 \end{frame}
 
 \begin{frame}{Ashby's Law: you can only control what you can sense}
   \begin{block}{Law of Requisite Variety (W. Ross Ashby, \emph{An Introduction to Cybernetics}, 1956)}
-    Only variety can absorb variety: a regulator can only correct the disturbances it can tell apart.
+    Only variety can absorb variety. A regulator can correct only the disturbances that it can identify.
   \end{block}
   \vspace{0.2cm}
   \begin{itemize}
-    \item For an agent loop the \textbf{checks are the sensors}. The loop can never be better than its checks.
-    \item A bug the tests can't see is a bug the loop will happily ship.
-    \item Goodhart's law is the dark side: a measure that becomes a target stops being a good measure.
-    \item The cheapest way for an agent to make a failing test pass is to \alert{edit the test}.
+    \item In an agent loop, \textbf{the checks are the sensors}. The loop cannot be better than its checks.
+    \item The loop ships any bug that the tests do not detect.
+    \item Goodhart's law applies: a measure that becomes a target stops being a good measure.
+    \item For an agent, the cheapest way to make a failing test pass is to \alert{edit the test}.
   \end{itemize}
   \vspace{0.2cm}
-  \centering\textbf{Invest in sensing before you invest in smarter planning.}
+  \centering\textbf{Add sensors before you add a smarter planner.}
 \end{frame}
 
 % =====================================================================
@@ -196,12 +196,12 @@
     \end{column}
     \begin{column}{0.45\textwidth}
       \begin{block}{Level-triggered, not edge-triggered}
-        A controller reacts to \emph{what is true now}, not to the event that just happened. Missed an event? The next pass still sees the gap.
+        A controller acts on \emph{the current state}, not on the last event. If it misses an event, the next pass still finds the gap.
       \end{block}
     \end{column}
   \end{columns}
   \vspace{0.3cm}
-  The controller never runs a script from A to B. It only knows how to make the \emph{next correction}. Kill a pod and it comes back: \alert{self-healing falls out of the loop}. Nobody writes a special case for it.
+  The controller does not run a script from start to end. It calculates only the \emph{next correction}. If a pod stops, the loop starts a new pod, so \alert{self-healing comes from the loop}, not from special-case code.
 \end{frame}
 
 \begin{frame}{The control plane, mapped}
@@ -211,14 +211,14 @@
 
 \begin{frame}{MLOps already runs on these loops}
   \begin{itemize}
-    \item \textbf{GitOps} (Argo CD, Flux): git holds the desired state, a controller syncs the cluster to it.
-    \item \textbf{Continuous training}: a metric drops below the line, retrain until it's back above.
-    \item \textbf{Progressive delivery}: canary metrics go bad, roll back automatically.
-    \item \textbf{Data validation before training}: a gate that rejects bad input, like an admission webhook.
+    \item \textbf{GitOps} (Argo CD, Flux): git holds the desired state, and a controller syncs the cluster to it.
+    \item \textbf{Continuous training}: if a metric drops below the line, retrain until the metric is above the line again.
+    \item \textbf{Progressive delivery}: if canary metrics get worse, the system rolls back.
+    \item \textbf{Data validation before training}: a gate rejects bad input, like an admission webhook.
   \end{itemize}
   \vspace{0.4cm}
-  \begin{block}{So what's new?}
-    Only the actuator. The thing making the change is now a language model, and it can make \emph{any} change, including bad ones. Everything else you already know.
+  \begin{block}{What is new}
+    Only the actuator. A language model now makes the change, and it can make \emph{any} change, bad changes too. The other parts stay the same.
   \end{block}
 \end{frame}
 
@@ -236,11 +236,11 @@
     \toprule
     \textbf{Rule} & \textbf{In Kubernetes} & \textbf{In an agent loop} \\
     \midrule
-    Declarative & manifest says \emph{what}, not \emph{how} & ``all checks pass'' beats a 47-step checklist \\
-    Observe first & read the API server before acting & read the code and run the tests before editing \\
-    Small diffs & change one thing per pass & one target per round, cap the diff size \\
-    Idempotent & re-running a pass is harmless & ``file contains X'', not ``append Y'' \\
-    Crash-only & controllers can die anytime & progress lives in git, not in the agent's head \\
+    Declarative & the manifest says \emph{what}, not \emph{how} & ``all checks pass'' is better than a 47-step checklist \\
+    Observe first & read the API server before each action & read the code and run the tests before each edit \\
+    Small diffs & change one thing per pass & one target per round, with a limit on diff size \\
+    Idempotent & a second pass causes no damage & ``the file contains X'', not ``append Y'' \\
+    Crash-only & a controller can stop at any time & git stores the progress, and the agent stores nothing \\
     Bounded ownership & labels and selectors & one loop owns one directory \\
     \bottomrule
   \end{tabular}
@@ -264,9 +264,9 @@
   \vspace{0.3cm}
   \small
   \begin{itemize}
-    \item About 970 lines of Python, standard library only. Git is its etcd: every kept change is a commit.
-    \item The agent is just a shell command. pi, Claude Code, Codex, or a script.
-    \item Kill it at any point; rerun picks up where it left off, with budgets intact.
+    \item loopctl has about 970 lines of Python and uses only the standard library. Git is its etcd: each kept change is a commit.
+    \item The agent is a shell command: pi, Claude Code, Codex or a script.
+    \item You can stop loopctl at any time. When you start it again, it continues from the last commit with the same budgets.
   \end{itemize}
 \end{frame}
 
@@ -299,15 +299,15 @@ max_regressions  = 2          # oscillation: stop thrashing
     \textbf{loopctl} & \textbf{Cybernetics} & \textbf{Kubernetes} \\
     \midrule
     \texttt{goal} + \texttt{[[checks]]} & setpoint & manifest \\
-    running the checks & sensor & watch via API server \\
-    passing vs.\ failing & comparator & diff \\
+    the check run & sensor & watch via API server \\
+    pass/fail comparison & comparator & diff \\
     the agent (\texttt{actor}) & actuator & controller writes \\
     \texttt{git revert} on regression & negative feedback & rollback \\
     backoff, \texttt{max\_diff\_lines} & damping & rate-limited requeue \\
-    \texttt{max\_regressions} & oscillation guard & --- \\
-    \texttt{stall\_iterations} & steady-state error & --- \\
-    \texttt{[[admission]]}, approval & --- & admission webhooks \\
-    lease file, sandbox & --- & RBAC, namespaces \\
+    \texttt{max\_regressions} & oscillation guard & none \\
+    \texttt{stall\_iterations} & steady-state error & none \\
+    \texttt{[[admission]]}, approval & none & admission webhooks \\
+    lease file, sandbox & none & RBAC, namespaces \\
     \texttt{[decider]} & controller logic & scheduler \\
     \bottomrule
   \end{tabular}
@@ -332,7 +332,7 @@ $ ./examples/churn/demo.sh
 [churn] observe: 3/3 passing
 [churn] converged
 \end{lstlisting}
-  \small Three planted bugs: \texttt{contract} not one-hot encoded, train/serve skew, \texttt{support\_calls} dropped. Round 2 lifts AUC from 0.75 to 0.82: kept, but still under 0.85. Round 3 gets it to 0.874.
+  \small The model has three planted bugs: \texttt{contract} has no one-hot encoding, training and serving use different scaling, and \texttt{support\_calls} is missing. Round 2 increases AUC from 0.75 to 0.82, and loopctl keeps that change, but AUC is still below 0.85. Round 3 increases AUC to 0.874.
 \end{frame}
 
 \begin{frame}[fragile]{Demo 2: a real agent as the actuator}
@@ -355,7 +355,7 @@ churn-pi: 3 actions, 3 commits, 0 rejected,
 \end{lstlisting}
     \end{column}
     \begin{column}{0.5\textwidth}
-      pi's \texttt{quality} round, found from just an AUC number:
+      pi found these fixes from the AUC value only:
 \begin{lstlisting}[style=termsm]
 -NUMERIC = ["tenure_months", "monthly_charges"]
 +NUMERIC = ["tenure_months", "monthly_charges",
@@ -364,7 +364,7 @@ churn-pi: 3 actions, 3 commits, 0 rejected,
 +    xs = scale(x, model["scaler"])
 +    return sigmoid(sum(w * v for w, v in zip(...xs)) + b)
 \end{lstlisting}
-      \small Both quality bugs in one 5-line change: the dropped feature and the train/serve skew. Holdout AUC 0.874, no gate tripped.
+      \small pi fixed both quality bugs (the missing feature and the scaling skew) in one 5-line change. Holdout AUC is 0.874, and no gate rejected the change.
     \end{column}
   \end{columns}
 \end{frame}
@@ -372,7 +372,7 @@ churn-pi: 3 actions, 3 commits, 0 rejected,
 \begin{frame}[fragile]{Demo 3: brain outside, hands inside}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
-      Each check runs in a throwaway Apple container VM:
+      loopctl runs each check in a temporary Apple container VM:
 \begin{lstlisting}[language=bash, numbers=none]
 container run --rm --network none \
   -v "$PWD":/work:ro -w /work \
@@ -383,13 +383,13 @@ run = "./incvm python3 -m unittest ..."
 \end{lstlisting}
     \end{column}
     \begin{column}{0.46\textwidth}
-      What agent-written code sees inside:
+      Code from the agent sees this inside the VM:
 \begin{lstlisting}[style=termsm]
 home visible: False
 network: blocked URLError
 write /work: blocked Read-only file system
 \end{lstlisting}
-      \small loopctl and the agent stay on the host, so the agent can't rewrite how it's graded. About 1\,s per VM; the full loop converged in 55\,s.
+      \small loopctl and the agent stay on the host, so the agent cannot change the grading. Each VM takes about 1\,s, and the full loop converged in 55\,s.
     \end{column}
   \end{columns}
 \end{frame}
@@ -403,17 +403,17 @@ write /work: blocked Read-only file system
     \toprule
     \textbf{Failure} & \textbf{Looks like} & \textbf{loopctl's answer} \\
     \midrule
-    Thrashing & fix one test, break two & verify every commit; revert on regression; stop after \texttt{max\_regressions} \\
-    Stale reads & acting on an old picture & re-run checks every round, optionally on a fresh clone \\
-    Endless loop & goal can't be reached & caps on rounds and time; \texttt{stall\_iterations} \\
-    Fighting loops & two loops, one directory & lease file; edits outside the directory halt the loop \\
-    Gaming the sensor & agent edits the test & admission checks reject the change \\
-    Blind loop & no signal to steer by & nothing to fix in the loop: add checks \\
+    Thrashing & fix one test, break two & verify each commit, revert a regression, stop after \texttt{max\_regressions} \\
+    Stale reads & decisions from old data & run the checks again each round, on a fresh clone if you want \\
+    Endless loop & the goal is out of reach & limits on rounds and time, and \texttt{stall\_iterations} \\
+    Fighting loops & two loops, one directory & a lease file, and a halt if the agent edits outside the directory \\
+    Sensor tampering & the agent edits the test & admission checks reject the change \\
+    Blind loop & no signal to steer by & the loop cannot fix this: add checks \\
     \bottomrule
   \end{tabular}
 \end{frame}
 
-\begin{frame}[fragile]{Live failure: thrashing gets caught}
+\begin{frame}[fragile]{Live failure: loopctl stops the thrashing}
   A worker that fixes \texttt{add} but breaks \texttt{mul} every time:
 \begin{lstlisting}[style=term]
 [calc] observe: 1/4 passing, failing ['add', 'sub', 'div']
@@ -427,11 +427,11 @@ write /work: blocked Read-only file system
 [calc] reverted 8a047e50: broke ['mul']
 [calc] thrashing: 2 reverted regressions
 \end{lstlisting}
-  \small Negative feedback (revert), then a hard stop instead of hunting forever. Every attempt stays in git history for a human to read.
+  \small loopctl reverts each regression (negative feedback) and stops after two, so the loop does not hunt. Git keeps every attempt for a human to read.
 \end{frame}
 
-\begin{frame}[fragile]{Live failure: the agent tries to move the goalposts}
-  A worker that ``fixes'' \texttt{quality} by lowering the AUC bar in \texttt{eval.py}:
+\begin{frame}[fragile]{Live failure: the agent edits the check}
+  This worker tries to fix \texttt{quality} with a lower AUC bar in \texttt{eval.py}:
 \begin{lstlisting}[style=termsm]
 [churn] act #2: target `quality`
 [churn] rejected: admission[sensors-untouched]: exit 1
@@ -443,23 +443,23 @@ write /work: blocked Read-only file system
 \end{lstlisting}
   \vspace{0.1cm}
   \begin{itemize}
-    \item Goodhart's law, blocked by an admission webhook: one line of shell.
-    \item Reading the holdout set from model code is blocked the same way (\texttt{no-holdout-in-model-code}).
-    \item The loop gives up instead of shipping a fake green build.
+    \item One line of shell in an admission webhook blocks this Goodhart attack.
+    \item A second gate blocks model code that reads the holdout set (\texttt{no-holdout-in-model-code}).
+    \item The loop stops and does not ship a false pass.
   \end{itemize}
 \end{frame}
 
 % =====================================================================
 \section[Decider]{A Small Brain That Decides}
 
-\begin{frame}{The scheduler doesn't run pods. It picks.}
+\begin{frame}{The scheduler picks a node, and the kubelet runs the pod}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \textbf{Kubernetes scheduler}
       \begin{itemize}
         \item filter: which nodes \emph{can} run this pod?
         \item score: which is best?
-        \item pick one; the kubelet does the work
+        \item pick: one node gets the pod
       \end{itemize}
       \vspace{0.2cm}
       \textbf{Same split for agents}
@@ -471,7 +471,7 @@ write /work: blocked Read-only file system
     \end{column}
     \begin{column}{0.46\textwidth}
       \begin{block}{TypeSafe Jev}
-        Answers typed questions with probabilities instead of free text. One request per round:
+        Jev answers typed questions with probabilities, not free text. loopctl sends one request per round:
         \begin{itemize}
           \item move: act / ask a human / stop
           \item target: which failing check next
@@ -480,7 +480,7 @@ write /work: blocked Read-only file system
     \end{column}
   \end{columns}
   \vspace{0.2cm}
-  \small Guardrails: it can't judge pass/fail or pick a passing check; under 50\% confidence it asks a human; if it fails, the loop falls back to the simple rule.
+  \small Guardrails: the decider cannot judge pass or fail, and it cannot pick a passing check. Under 50\% confidence, it asks a human. If it fails, loopctl uses the simple rule.
 \end{frame}
 
 \begin{frame}[fragile]{Rules vs.\ Jev: an impossible check listed first}
@@ -515,7 +515,7 @@ decide: stop `gpu` (0.97)
   stop=0.99 ask_human=0.01 act=0.00
 unreachable: decider chose stop
 \end{lstlisting}
-      \small\textbf{3 of 3 fixed}, then stopped by itself. Whole run: about 3\,s.
+      \small Jev fixed \textbf{3 of 3}, then stopped. The run took about 3\,s.
     \end{column}
   \end{columns}
 \end{frame}
@@ -532,9 +532,9 @@ unreachable: decider chose stop
         \item record what it does (traces)
         \item mine traces for failure patterns
         \item turn failures into checks
-        \item improve the agent; repeat
+        \item improve the agent, then repeat
       \end{enumerate}
-      \small The setpoint is now \emph{agent quality}. You are the actuator.
+      \small Here the setpoint is \emph{agent quality}, and you are the actuator.
     \end{column}
     \begin{column}{0.5\textwidth}
 \begin{lstlisting}[style=termsm]
@@ -566,14 +566,14 @@ cd loop-engineering
 ./examples/churn/demo.sh
 ./examples/churn/demo.sh loop.pi.toml
 \end{lstlisting}
-      \small The first run is offline and takes about 5 seconds; the second uses your agent. You need Python 3.11+ and git, nothing to \texttt{pip install}. The repo is private for now: ask me for access.
+      \small The first command runs offline in about 5 seconds. The second command uses your agent. You need Python 3.11+ and git, and you do not need \texttt{pip}. The repo is private now, so ask me for access.
     \end{column}
     \begin{column}{0.46\textwidth}
       \begin{enumerate}
         \item Watch it converge. Why did \texttt{quality} take two rounds?
-        \item Swap in your agent: pi, Claude Code, Codex.
+        \item Use your own agent: pi, Claude Code or Codex.
         \item Be the adversary: cheat, then find a cheat the gates miss.
-        \item Add the sensor it's missing: recall, calibration, AUC per segment.
+        \item Add the sensor that the loop does not have: recall, calibration or AUC per segment.
         \item Stretch: let Jev decide.
       \end{enumerate}
     \end{column}
@@ -585,14 +585,14 @@ cd loop-engineering
     \item \textbf{Declare the exit condition, not the path.} Checks are your setpoint.
     \item \textbf{Your checks are your sensors.} The loop is only as good as what it can see.
     \item \textbf{Never let the actuator touch the sensor.} Brain outside, hands inside.
-    \item \textbf{Observe before every action.} Don't trust the agent's memory.
-    \item \textbf{One small change per round, verified.} Undo anything that makes it worse.
-    \item \textbf{Keep actions safe to repeat, and state outside the agent.} Then you can kill it anytime.
-    \item \textbf{Install a governor.} Caps on rounds, time and money, plus a human gate.
+    \item \textbf{Observe before every action.} Do not trust the memory of the agent.
+    \item \textbf{Make one small change per round, and verify it.} Undo any change that makes the result worse.
+    \item \textbf{Keep actions safe to repeat, and keep state outside the agent.} Then you can stop the agent at any time.
+    \item \textbf{Install a governor.} Set limits on rounds, time and money, and add a human gate.
     \item \textbf{Let a small model decide and a big model do.} The checks still judge.
   \end{enumerate}
   \vspace{0.2cm}
-  \centering\textit{This isn't new. It's Kubernetes for thinking, and Watt's governor for software.}
+  \centering\textit{Loop engineering is Kubernetes for agents, and Watt's governor for software.}
 \end{frame}
 
 \begin{frame}{Questions?}
@@ -600,11 +600,11 @@ cd loop-engineering
     {\Huge\textbf{Questions?}}
 
     \vspace{0.6cm}
-    \small Goal = checks. \quad Checks = sensors. \quad Keep the judge outside the loop.
+    \small Your checks are the goal and the sensors. Keep the judge outside the loop.
   \end{center}
 \end{frame}
 
-\begin{frame}{Thanks! Let's talk}
+\begin{frame}{Contact}
   \begin{columns}[c]
     \begin{column}{0.58\textwidth}
       {\Huge\calligra Thanks!}
@@ -617,11 +617,10 @@ cd loop-engineering
       \texttt{blog.ucalyptus.me}
 
       \vspace{0.3cm}
-      Come find me for:
+      Talk to me after the session about:
       \begin{itemize}
-        \item help setting up the repo
-        \item the churn task, or wiring in your own agent
-        \item access to \texttt{loop-engineering} (private for now)
+        \item setup, the churn task, or your own agent
+        \item access to the private \texttt{loop-engineering} repo
       \end{itemize}
     \end{column}
     \begin{column}{0.36\textwidth}

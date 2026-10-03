@@ -19,6 +19,7 @@ observe ──► diff ──► act (1 target) ──► admit ──► commit
 ./examples/calc/demo.sh                     # offline demo with a deterministic actor
 ./examples/calc/demo.sh loop.pi.toml        # pi as the actor
 ./examples/calc/demo.sh loop.sandbox.toml   # pi as the actor, checks inside Apple container VMs
+TYPESAFE_ENV_FILE=~/files/.env ./examples/calc/demo.sh loop.jev.toml   # Jev decides the next move
 pip install -e .                 # or: PYTHONPATH=. python3 -m loopctl ...
 loopctl run path/to/loop.toml
 ```
@@ -32,7 +33,7 @@ loopctl run path/to/loop.toml
 | `loopctl reset M` | — | clear state, budgets, traces |
 
 Exit codes: `0` converged, `1` error, `2` unreachable, `3` thrashing, `4` budget exhausted,
-`5` ownership violation.
+`5` ownership violation, `6` needs a human (decider escalated, no one approved).
 
 ## Manifest
 
@@ -89,6 +90,38 @@ through, so a check is just `run = "./incvm python3 -m unittest ..."`. loopctl i
 host, so the agent can't change its own grading. Needs Apple Silicon; each check pays one VM
 boot (~1s). Image: `INCVM_IMAGE` (default `python:3.12-slim`).
 
+### Decider: a fast model picks the next move
+
+By default loopctl uses a fixed rule: act on the first failing check in manifest order. An
+optional `[decider]` replaces that rule with a decision model, split the same way the K8s
+scheduler is: it picks, it doesn't run.
+
+```toml
+[decider]
+run = 'python3 "$LOOPCTL_ROOT/deciders/typesafe.py"'   # keep it outside the workdir
+min_confidence = 0.5    # below this, the move goes to a human
+timeout_s = 30
+```
+
+Contract: the command gets JSON on stdin (goal, every check with pass/fail, attempts and failure
+output, loop counters, the last 12 act/reject/revert/verified events). It prints
+`{"move": "act"|"ask_human"|"stop", "target": <failing check>, "confidence": 0..1, "reason": "..."}`.
+
+What it can't do, by design:
+- Judge pass/fail or declare success. Only the checks converge the loop.
+- Pick a check that isn't failing, or skip the budget, stall and thrash breakers.
+- Act on a shaky call. `ask_human`, or any move under `min_confidence` (including an unsure
+  `stop`), asks on the TTY. With no TTY, or a "no", the loop halts with `needs_human` (exit 6).
+- Break the loop. A crash, timeout or invalid answer is logged as `decider_error` and that round
+  falls back to the built-in rule.
+
+`deciders/typesafe.py` implements it with [TypeSafe Jev](https://docs.typesafe.ai). It sends one
+request per round with two Choice questions: the move, and, when more than one check fails, the
+target. It needs `TYPESAFE_API_KEY`, or `TYPESAFE_ENV_FILE` pointing at a `.env` file. On
+`examples/calc/loop.jev.toml`, which lists an unfixable `gpu` check first, the built-in rule
+spends 3 rounds on `gpu` and halts with nothing fixed. Jev targets `add`, `sub` and `div`, then
+stops on `gpu` (0.97). Confidence thresholds are starting points; tune them on your own runs.
+
 ## Post → code
 
 | Post concept | Implementation |
@@ -104,6 +137,7 @@ boot (~1s). Image: `INCVM_IMAGE` (default `python:3.12-slim`).
 | Small diffs, dampening | one target per iteration, `max_diff_lines`, exponential backoff |
 | Thrashing | each commit is verified; breaking a passing check ⇒ `git revert`; `max_regressions` |
 | Infinite reconciliation | `max_iterations`, `max_actor_seconds`, `stall_iterations` |
+| Scheduler (filter, score, pick) | `[decider]`: a fast model picks the move and target; checks still judge |
 | Hill-climbing machine (traces) | `.loop/traces.jsonl` + `loopctl report` |
 
 ## Behavior notes

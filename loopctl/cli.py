@@ -54,6 +54,8 @@ def cmd_report(args: argparse.Namespace) -> int:
     targets = Counter(t["target"] for t in traces if t["event"] == "act")
     broke = Counter(name for t in traces if t["event"] == "revert" for name in t["broke"])
     actor_s = sum(t["seconds"] for t in traces if t["event"] == "act")
+    decisions = Counter(f"{t['source']}: {t['move']}" for t in traces if t["event"] == "decide")
+    decider_errors = Counter(t["error"].split(":", 1)[0] for t in traces if t["event"] == "decider_error")
     halts = [t for t in traces if t["event"] == "halt"]
 
     print(f"{m.name}: {by['act']} actions, {by['commit']} commits, {by['reject']} rejected, {by['revert']} reverted, {actor_s:.1f}s acting")
@@ -65,6 +67,8 @@ def cmd_report(args: argparse.Namespace) -> int:
         ("actions per target", targets),
         ("rejection reasons", reject_reasons),
         ("checks broken by reverted actions", broke),
+        ("decisions", decisions),
+        ("decider errors (fell back to rules)", decider_errors),
     ):
         if counter:
             print(f"\n{title}:")

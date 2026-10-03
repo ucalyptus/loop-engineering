@@ -1,0 +1,47 @@
+name = "calc-jev"
+goal = "calc.py arithmetic behaves as test_calc.py specifies."
+workdir = "."
+
+# Deterministic worker, so this example isolates what the decider changes.
+actor = "python3 fix_one.py"
+fresh_clone = true
+
+# Fast decision model picks the move (act / ask_human / stop) and which failing check to
+# target. Built-in rules instead always take the first failing check in this file.
+# Needs TYPESAFE_API_KEY or TYPESAFE_ENV_FILE. Keep the decider outside the workdir so the
+# worker can't edit it.
+[decider]
+run = 'python3 "$LOOPCTL_ROOT/deciders/typesafe.py"'
+min_confidence = 0.5
+timeout_s = 30
+
+# Listed first on purpose: no code edit can make this pass on a Mac.
+# Rules get stuck here; a decider should route around it, then stop.
+[[checks]]
+name = "gpu"
+run = "nvidia-smi"
+
+[[checks]]
+name = "add"
+run = "python3 -m unittest -q test_calc.TestCalc.test_add"
+
+[[checks]]
+name = "sub"
+run = "python3 -m unittest -q test_calc.TestCalc.test_sub"
+
+[[checks]]
+name = "mul"
+run = "python3 -m unittest -q test_calc.TestCalc.test_mul"
+
+[[checks]]
+name = "div"
+run = "python3 -m unittest -q test_calc.TestCalc.test_div"
+
+[[admission]]
+name = "tests-unchanged"
+run = "git diff --cached --quiet -- test_calc.py"
+
+[limits]
+max_iterations = 10
+stall_iterations = 3
+backoff_base_s = 0.2

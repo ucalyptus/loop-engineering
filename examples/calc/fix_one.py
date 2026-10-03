@@ -14,6 +14,9 @@ FIXES = {
 }
 
 target = os.environ["LOOP_TARGET"]
+if target not in FIXES:
+    print(f"{target}: no code change can fix this")
+    raise SystemExit(0)
 src = Path("calc.py")
 text = src.read_text()
 bad, good = FIXES[target]

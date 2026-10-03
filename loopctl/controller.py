@@ -25,16 +25,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .manifest import Check, Manifest
+from .manifest import Check, Decider, Manifest
 from .store import Lease, State, Store
 
-CONVERGED, ERROR, UNREACHABLE, THRASHING, BUDGET, OWNERSHIP = 0, 1, 2, 3, 4, 5
+CONVERGED, ERROR, UNREACHABLE, THRASHING, BUDGET, OWNERSHIP, NEEDS_HUMAN = 0, 1, 2, 3, 4, 5, 6
 EXIT_CODES = {
     "converged": CONVERGED,
     "unreachable": UNREACHABLE,
     "thrashing": THRASHING,
     "budget_exhausted": BUDGET,
     "ownership_violation": OWNERSHIP,
+    "needs_human": NEEDS_HUMAN,
 }
 OUTPUT_TAIL = 4000
 
@@ -205,6 +206,89 @@ def tty_ask(prompt: str) -> bool:
     return input(prompt).strip().lower() in {"y", "yes"}
 
 
+MOVES = ("act", "ask_human", "stop")
+DECIDER_EVENTS = {"act", "reject", "revert", "verified"}
+
+
+class DeciderError(RuntimeError):
+    pass
+
+
+@dataclass
+class Decision:
+    move: str  # act | ask_human | stop
+    target: str  # always a failing check, even when move != act
+    confidence: float | None  # confidence in `move`; None for the built-in rules
+    source: str  # rules | decider
+    reason: str = ""
+
+
+def rule_decision(m: Manifest, obs: Observation) -> Decision:
+    """Built-in policy: act on the first failing check in manifest order."""
+    return Decision("act", next(c.name for c in m.checks if c.name in obs.failing), None, "rules")
+
+
+def decider_state(m: Manifest, obs: Observation, st: State, traces: list[dict]) -> dict:
+    """Everything the decider may look at: observed facts only, no prior decisions."""
+    attempts: dict[str, int] = {}
+    for t in traces:
+        if t["event"] == "act":
+            attempts[t["target"]] = attempts.get(t["target"], 0) + 1
+    recent = []
+    for t in traces:
+        if t["event"] in DECIDER_EVENTS:
+            e = {k: t[k] for k in ("event", "target", "exit", "reason", "broke", "gained") if k in t}
+            if "output" in t:
+                e["agent_output"] = _tail(t["output"], 300)
+            recent.append(e)
+    return {
+        "goal": m.goal,
+        "checks": [
+            {
+                "name": c.name,
+                "command": c.run,
+                "passing": c.name in obs.passing,
+                "attempts": attempts.get(c.name, 0),
+                **({"failure_output": _tail(obs.output[c.name], 1500)} if c.name in obs.output else {}),
+            }
+            for c in m.checks
+        ],
+        "failing": obs.failing,
+        "loop": {
+            "iteration": st.iteration,
+            "max_iterations": m.limits.max_iterations,
+            "no_progress_streak": st.no_progress_streak,
+            "stall_iterations": m.limits.stall_iterations,
+            "regressions": st.regressions,
+            "max_regressions": m.limits.max_regressions,
+        },
+        "recent_events": recent[-12:],
+    }
+
+
+def ask_decider(d: Decider, state: dict, cwd: Path) -> Decision:
+    """Run the decider command and validate its answer against what it was allowed to pick."""
+    try:
+        p = subprocess.run(d.run, shell=True, cwd=cwd, input=json.dumps(state), text=True, capture_output=True, timeout=d.timeout_s)
+    except subprocess.TimeoutExpired:
+        raise DeciderError(f"timed out after {d.timeout_s:.0f}s") from None
+    if p.returncode != 0:
+        raise DeciderError(f"exit {p.returncode}: {_tail(p.stderr, 300).strip()}")
+    try:
+        data = json.loads(p.stdout)
+    except json.JSONDecodeError:
+        raise DeciderError(f"stdout is not JSON: {_tail(p.stdout, 200)!r}") from None
+    move, target, conf = data.get("move"), data.get("target"), data.get("confidence")
+    if move not in MOVES:
+        raise DeciderError(f"move {move!r} not in {MOVES}")
+    if target not in state["failing"]:
+        raise DeciderError(f"target {target!r} is not a failing check")
+    if not isinstance(conf, (int, float)) or not 0 <= conf <= 1:
+        raise DeciderError(f"confidence {conf!r} not in [0, 1]")
+    return Decision(move, target, float(conf), "decider", str(data.get("reason", "")))
+
+
+
 class Controller:
     def __init__(
         self,
@@ -256,12 +340,26 @@ class Controller:
         if lost:
             self.git.revert(candidate)
             st.regressions += 1
-            self.store.trace("revert", commit=candidate, broke=lost, regressions=st.regressions)
+            self.store.trace("revert", target=st.target, commit=candidate, broke=lost, regressions=st.regressions)
             self.log(f"[{self.m.name}] reverted {candidate[:8]}: broke {lost}")
             return None
         gained = sorted(set(obs.passing) - set(st.baseline_passing))
-        self.store.trace("verified", commit=candidate, gained=gained)
+        self.store.trace("verified", target=st.target, commit=candidate, gained=gained)
         return bool(gained)
+
+    def _decide(self, st: State, obs: Observation) -> Decision:
+        d = None
+        if self.m.decider:
+            try:
+                d = ask_decider(self.m.decider, decider_state(self.m, obs, st, self.store.traces()), self.m.workdir)
+            except DeciderError as e:
+                self.store.trace("decider_error", error=str(e))
+                self.log(f"[{self.m.name}] decider failed ({e}); using built-in rules")
+        d = d or rule_decision(self.m, obs)
+        self.store.trace("decide", move=d.move, target=d.target, confidence=d.confidence, source=d.source, reason=d.reason)
+        if d.source == "decider":
+            self.log(f"[{self.m.name}] decide: {d.move} `{d.target}` (confidence {d.confidence:.2f})" + (f" — {d.reason}" if d.reason else ""))
+        return d
 
     def _run(self) -> int:
         m, lim, st = self.m, self.m.limits, self.store.load()
@@ -298,7 +396,18 @@ class Controller:
                 self.log(f"[{m.name}] backoff {delay:.1f}s")
                 self.sleep(delay)
 
-            target = next(c for c in m.checks if c.name in obs.failing)  # one target per iteration
+            decision = self._decide(st, obs)
+            if decision.source == "decider":
+                floor = m.decider.min_confidence
+                unsure = decision.confidence < floor
+                if decision.move == "stop" and not unsure:
+                    return self._halt(st, "unreachable", f"decider chose stop (confidence {decision.confidence:.2f}); still failing {obs.failing}")
+                if decision.move != "act" or unsure:
+                    why = f"decider unsure: {decision.move} at {decision.confidence:.2f} < {floor:.2f}" if unsure else f"decider chose {decision.move}"
+                    if not self.ask(f"[{m.name}] {why}. Let the agent try `{decision.target}`? [y/N] "):
+                        return self._halt(st, "needs_human", f"{why}; suggested target `{decision.target}`")
+                    self.store.trace("human_override", move=decision.move, target=decision.target)
+            target = next(c for c in m.checks if c.name == decision.target)  # one target per iteration
             outside_before = self.git.outside_snapshot()
             st.iteration += 1
             st.target, st.phase = target.name, "acting"

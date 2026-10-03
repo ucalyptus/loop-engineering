@@ -34,6 +34,20 @@ class Limits:
 
 
 @dataclass(frozen=True)
+class Decider:
+    """Optional fast decision model that picks the next move and target (default: built-in rules).
+
+    It may only choose among failing checks and act / ask_human / stop. It never judges
+    pass/fail and cannot override budgets or the thrash/stall breakers.
+    """
+
+    run: str  # command: JSON state on stdin, JSON decision on stdout
+    min_confidence: float = 0.5  # below this, the move goes to a human
+    timeout_s: float = 30.0
+
+
+
+@dataclass(frozen=True)
 class Manifest:
     path: Path
     name: str
@@ -46,6 +60,7 @@ class Manifest:
     require_approval: bool  # human-in-the-loop gate before commit
     fresh_clone: bool  # observe a fresh clone of HEAD instead of the working tree
     limits: Limits
+    decider: Decider | None  # None => built-in rules
 
 
 def _checks(raw: object, key: str) -> tuple[Check, ...]:
@@ -103,4 +118,19 @@ def load(path: str | Path) -> Manifest:
         require_approval=bool(data.get("require_approval", False)),
         fresh_clone=bool(data.get("fresh_clone", False)),
         limits=Limits(**raw_limits),
+        decider=_decider(data.get("decider")),
     )
+
+
+def _decider(raw: object) -> Decider | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or not raw.get("run"):
+        raise ManifestError("[decider] needs `run`")
+    unknown = set(raw) - set(Decider.__dataclass_fields__)
+    if unknown:
+        raise ManifestError(f"unknown [decider] keys: {sorted(unknown)}")
+    d = Decider(str(raw["run"]), float(raw.get("min_confidence", 0.5)), float(raw.get("timeout_s", 30.0)))
+    if not 0 <= d.min_confidence <= 1:
+        raise ManifestError("[decider] min_confidence must be between 0 and 1")
+    return d

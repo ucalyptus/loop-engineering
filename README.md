@@ -20,9 +20,15 @@ observe ──► diff ──► act (1 target) ──► admit ──► commit
 ./examples/calc/demo.sh loop.pi.toml        # pi as the actor
 ./examples/calc/demo.sh loop.sandbox.toml   # pi as the actor, checks inside Apple container VMs
 TYPESAFE_ENV_FILE=~/files/.env ./examples/calc/demo.sh loop.jev.toml   # Jev decides the next move
+./examples/churn/demo.sh                    # ML example: data contract, AUC bar, model card
 pip install -e .                 # or: PYTHONPATH=. python3 -m loopctl ...
 loopctl run path/to/loop.toml
 ```
+
+Workshop task: [`examples/churn/README.md`](examples/churn/README.md). A pure-Python churn model with
+three planted bugs; run the loop, attack its gates, add the sensor it's missing.
+
+Talk: `talk/slides.pdf` (MLOps North, Nov 5 2026); speaker notes in `talk/slides-notes.pdf`. Rebuild with `talk/build.sh`.
 
 | Command | K8s analog | Does |
 |---|---|---|

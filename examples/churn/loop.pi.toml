@@ -1,0 +1,36 @@
+name = "churn-pi"
+goal = "Ship-ready churn model: the data contract holds, holdout AUC is at least 0.85, and the model card documents the model."
+workdir = "."
+
+# Real agent. Any one-shot agent CLI works the same way, e.g.
+#   actor = 'claude -p --permission-mode acceptEdits "$(cat)"'
+actor = 'pi -p "$(cat)"'
+actor_timeout_s = 600
+fresh_clone = true
+
+[[checks]]
+name = "schema"
+run = "python3 validate.py"
+
+[[checks]]
+name = "quality"
+run = "python3 eval.py --min-auc 0.85"
+
+[[checks]]
+name = "model-card"
+run = "python3 check_card.py"
+
+[[admission]]
+name = "sensors-untouched"
+run = "git diff --cached --quiet -- eval.py validate.py check_card.py schema.json data/"
+
+[[admission]]
+name = "no-holdout-in-model-code"
+run = "! git diff --cached -U0 -- churn/ | grep -qi holdout"
+
+[limits]
+max_iterations = 10
+max_actor_seconds = 1500
+max_diff_lines = 80
+stall_iterations = 3
+max_regressions = 2

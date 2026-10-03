@@ -1,0 +1,10 @@
+{
+  "columns": {
+    "customer_id": {"type": "str"},
+    "tenure_months": {"type": "int", "min": 0, "max": 72},
+    "monthly_charges": {"type": "float", "min": 0, "max": 500},
+    "support_calls": {"type": "int", "min": 0, "max": 50},
+    "contract": {"type": "str", "allowed": ["month", "year", "two_year"]},
+    "churned": {"type": "int", "allowed": [0, 1]}
+  }
+}

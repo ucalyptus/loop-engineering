@@ -1,0 +1,13 @@
+% Title-page emblem in the theme colour (RGB 151,31,48).
+\documentclass[tikz, border=2pt]{standalone}
+\usepackage{fontspec}
+\setsansfont{Helvetica Neue}
+\newfontfamily\greekfont{Helvetica Neue}
+\usetikzlibrary{arrows.meta, decorations.text}
+\definecolor{tsinghua}{RGB}{151,31,48}
+\input{emblem}
+\begin{document}
+\begin{tikzpicture}
+  \emblem{tsinghua}
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,15 @@
+% Faint emblem watermark on a 16:9 beamer page (16cm x 9cm), placed like the original seal.
+\documentclass[tikz, border=0pt]{standalone}
+\usepackage{fontspec}
+\setsansfont{Helvetica Neue}
+\newfontfamily\greekfont{Helvetica Neue}
+\usetikzlibrary{arrows.meta, decorations.text}
+\input{emblem}
+\begin{document}
+\begin{tikzpicture}
+  \useasboundingbox (0,0) rectangle (16cm,9cm);
+  \begin{scope}[shift={(13.3cm,4.2cm)}, scale=1.05]
+    \emblem{black!9}
+  \end{scope}
+\end{tikzpicture}
+\end{document}

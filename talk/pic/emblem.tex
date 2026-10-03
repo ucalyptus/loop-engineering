@@ -1,0 +1,18 @@
+% Feedback-loop emblem used for the slide background and the title page.
+% Replaces the university seal from the original theme. Build: see ../build.sh
+%   \emblem{<color>} draws the emblem centred at (0,0), radius ~3.2cm.
+\newcommand{\emblem}[1]{%
+  \begin{scope}[color=#1, line width=0.8pt]
+    \draw (0,0) circle[radius=3.2cm];
+    \draw (0,0) circle[radius=2.45cm];
+    \path[decorate, decoration={text along path, text align=fit to path,
+          text={|\sffamily\bfseries\large\color{#1}| OBSERVE • COMPARE • ACT • REPEAT • }}]
+      (0,0) ++(170:2.68cm) arc[start angle=170, end angle=-190, radius=2.68cm];
+    \foreach \a in {80, 200, 320} {
+      \draw[line width=2.2pt, -{Stealth[length=7pt, width=9pt]}]
+        (\a:1.8cm) arc[start angle=\a, end angle=\a-95, radius=1.8cm];
+    }
+    \node[font=\sffamily\large] at (0,0.12) {\greekfont κυβερνήτης};
+    \node[font=\sffamily\scriptsize] at (0,-0.45) {1788 · 1948 · 2014 · 2025};
+  \end{scope}%
+}

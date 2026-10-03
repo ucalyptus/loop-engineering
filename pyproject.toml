@@ -1,0 +1,16 @@
+[project]
+name = "loopctl"
+version = "0.1.0"
+description = "K8s-style reconciliation loops for coding agents"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+loopctl = "loopctl.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["loopctl"]

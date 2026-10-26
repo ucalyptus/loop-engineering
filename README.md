@@ -18,9 +18,11 @@ observe ──► diff ──► act (1 target) ──► admit ──► commit
 ```bash
 ./examples/calc/demo.sh                     # offline demo with a deterministic actor
 ./examples/calc/demo.sh loop.pi.toml        # pi as the actor
-./examples/calc/demo.sh loop.sandbox.toml   # pi as the actor, checks inside Apple container VMs
+./examples/calc/demo.sh loop.sandbox.toml   # pi as the actor, checks inside throwaway Docker containers
 TYPESAFE_ENV_FILE=~/files/.env ./examples/calc/demo.sh loop.jev.toml   # Jev decides the next move
+./examples/calc/demo.sh loop.thrash.toml    # failure demo: over-correcting actor, halts as thrashing (exit 3)
 ./examples/churn/demo.sh                    # ML example: data contract, AUC bar, model card
+./examples/churn/demo.sh loop.cheat.toml    # failure demo: actor lowers the AUC bar, admission rejects (exit 2)
 pip install -e .                 # or: PYTHONPATH=. python3 -m loopctl ...
 loopctl run path/to/loop.toml
 ```
@@ -28,7 +30,9 @@ loopctl run path/to/loop.toml
 Workshop task: [`examples/churn/README.md`](examples/churn/README.md). A pure-Python churn model with
 three planted bugs; run the loop, attack its gates, add the sensor it's missing.
 
-Talk: `talk/slides.pdf` (MLOps North, Nov 5 2026); speaker notes in `talk/slides-notes.pdf`. Rebuild with `talk/build.sh`.
+Talk: [`mlops-north-nov5.html`](mlops-north-nov5.html) (MLOps World North, Nov 5 2026; open it in a browser,
+arrow keys to move). PDF backup (16:9, for the organizers): `mlops-north-nov5.pdf`, rebuilt with
+`./export-pdf.sh`. Speaker notes stay local (`mlops-north-nov5-notes.txt`, gitignored).
 
 | Command | K8s analog | Does |
 |---|---|---|
@@ -90,11 +94,12 @@ actor = 'claude -p --permission-mode acceptEdits "$(cat)"'   # Claude Code
 ### Sandboxing checks (brain outside, hands inside)
 
 Checks run code the agent just wrote. `examples/calc/incvm` runs one check in a throwaway
-[Apple container](https://github.com/apple/container) VM: the check's directory is mounted
-read-only at `/work`, there is no network, and the VM is deleted afterwards. The exit code passes
-through, so a check is just `run = "./incvm python3 -m unittest ..."`. loopctl itself stays on the
-host, so the agent can't change its own grading. Needs Apple Silicon; each check pays one VM
-boot (~1s). Image: `INCVM_IMAGE` (default `python:3.12-slim`).
+container: the check's directory is mounted read-only at `/work`, there is no network, and the
+container is deleted afterwards. The exit code passes through, so a check is just
+`run = "./incvm python3 -m unittest ..."`. loopctl itself stays on the host, so the agent can't
+change its own grading. Docker is the default runtime (~0.2s per warm check).
+`INCVM_RUNTIME=container` uses [Apple container](https://github.com/apple/container) instead: one
+microVM per check (~1s), Apple Silicon only. Image: `INCVM_IMAGE` (default `python:3.12-slim`).
 
 ### Decider: a fast model picks the next move
 

@@ -2,6 +2,7 @@
 # Copies the churn example into a throwaway git repo and reconciles it.
 #   ./demo.sh                 offline, deterministic worker (fix_one.py)
 #   ./demo.sh loop.pi.toml    pi as the worker (needs pi and a model key)
+#   ./demo.sh loop.cheat.toml failure demo: a worker that lowers the AUC bar; the admission gate stops it
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"

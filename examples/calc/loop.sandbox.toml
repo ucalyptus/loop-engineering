@@ -3,8 +3,9 @@ goal = "calc.py arithmetic behaves as test_calc.py specifies."
 workdir = "."
 
 # Brain outside: loopctl and pi run on the host, holding the goal, limits and undo.
-# Hands inside: every check runs agent-written code in a throwaway VM via ./incvm
-# (read-only copy of a fresh clone, no network, deleted afterwards).
+# Hands inside: every check runs agent-written code in a throwaway container via ./incvm
+# (read-only copy of a fresh clone, no network, deleted afterwards). Docker by default;
+# INCVM_RUNTIME=container uses an Apple container microVM per check instead.
 actor = 'pi -p "$(cat)"'
 actor_timeout_s = 600
 

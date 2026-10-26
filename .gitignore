@@ -3,3 +3,6 @@ __pycache__/
 .loop/
 build/
 dist/
+
+# speaker notes stay private
+mlops-north-nov5-notes.txt

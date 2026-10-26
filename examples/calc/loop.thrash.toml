@@ -1,0 +1,35 @@
+name = "calc-thrash"
+goal = "calc.py arithmetic behaves as test_calc.py specifies."
+workdir = "."
+
+# Failure demo: thrash.py fixes `add` but breaks `mul` on every attempt.
+# Expect two reverts, then a halt with "thrashing" (exit 3).
+actor = "python3 thrash.py"
+fresh_clone = true
+
+[[checks]]
+name = "add"
+run = "python3 -m unittest -q test_calc.TestCalc.test_add"
+
+[[checks]]
+name = "sub"
+run = "python3 -m unittest -q test_calc.TestCalc.test_sub"
+
+[[checks]]
+name = "mul"
+run = "python3 -m unittest -q test_calc.TestCalc.test_mul"
+
+[[checks]]
+name = "div"
+run = "python3 -m unittest -q test_calc.TestCalc.test_div"
+
+[[admission]]
+name = "tests-unchanged"
+run = "git diff --cached --quiet -- test_calc.py"
+
+[limits]
+max_iterations = 10
+max_diff_lines = 20
+stall_iterations = 3
+max_regressions = 2
+backoff_base_s = 0.2

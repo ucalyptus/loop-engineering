@@ -1,0 +1,42 @@
+name = "calc-approve"
+goal = "calc.py arithmetic behaves as test_calc.py specifies."
+workdir = "."
+
+# Actor: any command that reads the prompt on stdin (env has LOOP_* vars) and edits files.
+# Real agent, e.g.:  actor = 'pi -p "$(cat)"'  (see loop.pi.toml, loop.sandbox.toml)
+actor = "python3 fix_one.py"
+actor_timeout_s = 600
+
+# Observe from a fresh clone of HEAD each iteration (no stale local artifacts).
+fresh_clone = true
+
+# Human gate before each commit: answer y or n at the prompt (needs a TTY; no TTY = denied).
+require_approval = true
+
+[[checks]]
+name = "add"
+run = "python3 -m unittest -q test_calc.TestCalc.test_add"
+
+[[checks]]
+name = "sub"
+run = "python3 -m unittest -q test_calc.TestCalc.test_sub"
+
+[[checks]]
+name = "mul"
+run = "python3 -m unittest -q test_calc.TestCalc.test_mul"
+
+[[checks]]
+name = "div"
+run = "python3 -m unittest -q test_calc.TestCalc.test_div"
+
+# Admission webhook: the actor may not move the goalposts.
+[[admission]]
+name = "tests-unchanged"
+run = "git diff --cached --quiet -- test_calc.py"
+
+[limits]
+max_iterations = 10
+max_diff_lines = 20
+stall_iterations = 3
+max_regressions = 2
+backoff_base_s = 0.5

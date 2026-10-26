@@ -8,7 +8,7 @@ import sys
 from collections import Counter
 from dataclasses import asdict
 
-from .controller import ERROR, Controller, Git, LoopError, observe
+from .controller import ERROR, Controller, Git, LoopError, check_worktree, observe
 from .manifest import ManifestError, load
 from .store import LeaseHeld, Store
 
@@ -26,6 +26,24 @@ def cmd_diff(args: argparse.Namespace) -> int:
         if c.name in obs.output and args.verbose:
             print("  " + obs.output[c.name].replace("\n", "\n  "))
     return 0 if not obs.failing else 1
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    """Observe uncommitted work now: checks plus admission gates. Exit 0 iff all pass.
+
+    The sensor for agent-harness hooks (integrations/): read-only, no commits, no loop state."""
+    m = load(args.manifest)
+    r = check_worktree(m, Git(m.workdir))
+    if args.json:
+        print(json.dumps({"ok": r.ok, **asdict(r)}))
+        return 0 if r.ok else 1
+    for c in m.checks:
+        print(f"{'✓' if c.name in r.passing else '✗'} {c.name}")
+        if c.name in r.output and args.verbose:
+            print("  " + r.output[c.name].replace("\n", "\n  "))
+    for g in r.admission:
+        print(f"{'✓' if g['ok'] else '✗'} admission[{g['name']}]" + (f": {g['detail']}" if g["detail"] else ""))
+    return 0 if r.ok else 1
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -83,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, fn, help_ in (
         ("run", cmd_run, "reconcile until converged or a circuit breaker trips"),
         ("diff", cmd_diff, "observe once: desired vs actual"),
+        ("check", cmd_check, "observe uncommitted work now: checks + admission (for harness hooks)"),
         ("status", cmd_status, "print persisted controller state"),
         ("report", cmd_report, "mine traces for failure patterns"),
         ("reset", cmd_reset, "clear persisted state, budgets and traces"),
@@ -90,8 +109,10 @@ def main(argv: list[str] | None = None) -> int:
         sp = sub.add_parser(name, help=help_)
         sp.add_argument("manifest", help="path to loop.toml")
         sp.set_defaults(fn=fn)
-        if name == "diff":
+        if name in ("diff", "check"):
             sp.add_argument("-v", "--verbose", action="store_true", help="show failing check output")
+        if name == "check":
+            sp.add_argument("--json", action="store_true", help="machine-readable result")
     args = p.parse_args(argv)
     try:
         return args.fn(args)

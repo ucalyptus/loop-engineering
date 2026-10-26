@@ -22,12 +22,15 @@ observe ──► diff ──► act (1 target) ──► admit ──► commit
 TYPESAFE_ENV_FILE=~/files/.env ./examples/calc/demo.sh loop.jev.toml   # Jev decides the next move
 ./examples/calc/demo.sh loop.thrash.toml    # failure demo: over-correcting actor, halts as thrashing (exit 3)
 ./examples/calc/demo.sh loop.shadow.toml    # failure demo: a one-line unittest.py fakes every test (false exit 0)
+./examples/calc/demo.sh loop.approve.toml   # human gate: y/N before each commit
+./examples/calc/crash-demo.sh               # kill the loop mid-action, then resume
 ./examples/calc-bend/demo.sh                # Bend 2: every check is a machine-checked proof
 ./examples/calc-bend/demo.sh loop.cheat.toml   # failure demo: three ways to fake a proof, none gets through (exit 2)
 ./examples/churn/demo.sh                    # ML example: data contract, AUC bar, model card
 ./examples/churn/demo.sh loop.cheat.toml    # failure demo: actor lowers the AUC bar, admission rejects (exit 2)
 pip install -e .                 # or: PYTHONPATH=. python3 -m loopctl ...
 loopctl run path/to/loop.toml
+pi -e integrations/loopctl.ts                # the loop inside a pi or oh-my-pi session (see below)
 ```
 
 Workshop task: [`examples/churn/README.md`](examples/churn/README.md). A pure-Python churn model with
@@ -41,6 +44,7 @@ arrow keys to move). PDF backup (16:9, for the organizers): `mlops-north-nov5.pd
 |---|---|---|
 | `loopctl run M` | controller | reconcile until converged / halted |
 | `loopctl diff M [-v]` | `kubectl diff` | observe once, show desired vs actual |
+| `loopctl check M [-v] [--json]` | readiness probe | checks + admission gates on uncommitted work; read-only, for harness hooks |
 | `loopctl status M` | `kubectl get -o yaml` | persisted controller state |
 | `loopctl report M` | metrics | mine traces for failure patterns |
 | `loopctl reset M` | — | clear state, budgets, traces |
@@ -87,12 +91,49 @@ Non-zero exit = rejected action.
 
 ### Using an agent harness
 
-loopctl calls the agent; the agent doesn't need a plugin. Any CLI with a one-shot mode works:
+Three entry points, one `loop.toml`:
 
-```toml
-actor = 'pi -p "$(cat)"'                              # pi
-actor = 'claude -p --permission-mode acceptEdits "$(cat)"'   # Claude Code
-```
+1. **Wrap.** loopctl calls the agent; the agent doesn't need a plugin. Any CLI with a one-shot mode
+   works, so `loopctl run` fits a CI job, cron or a Kubernetes Job:
+
+   ```toml
+   actor = 'pi -p "$(cat)"'                              # pi
+   actor = 'claude -p --permission-mode acceptEdits "$(cat)"'   # Claude Code
+   ```
+
+2. **Embed.** [`integrations/loopctl.ts`](integrations/loopctl.ts) is one extension file for
+   [pi](https://github.com/earendil-works/pi) and oh-my-pi. The session itself becomes the loop: when
+   the agent says it is done, the extension runs `loopctl check` on the project's `loop.toml`, and if
+   a check fails or an admission gate rejects the uncommitted changes, it sends the agent back with
+   the failing output (oh-my-pi: `session_stop` returns `{decision: "block", reason}`; pi:
+   `agent_before_settle` returns a `custom_message` entry and `continue: true`). A governor lets the
+   agent stop after `LOOPCTL_MAX_ROUNDS` rounds (default 5), or after 3 rounds with no change in
+   what fails. `/loop` shows the checks; `/loop off` and `/loop on` toggle the gate.
+
+   ```bash
+   pi  -e integrations/loopctl.ts      # or copy it into .pi/extensions/
+   omp -e integrations/loopctl.ts      # or copy it into .omp/extensions/
+   ```
+
+   Tested on `examples/calc` with a partial task ("fix only the add function"): without the
+   extension pi stopped with `sub` and `div` failing; with it, pi (26 s) and oh-my-pi (33 s) were sent
+   back and fixed both. Told to make the tests pass by editing `test_calc.py`, pi was sent back by the
+   `tests-unchanged` gate, reverted the test file and fixed `calc.py` instead (45 s).
+
+3. **Call.** Any other agent loop can run `loopctl check loop.toml --json` where it would stop and
+   branch on `ok`. The result lists `passing`, `failing`, each failing check's `output`, every
+   `admission` gate with `ok` and `detail`, and `changed_lines`. Checks run in the workdir (ignoring
+   `fresh_clone`, since the edits are not committed); gates see the changes through a throwaway copy of
+   the git index, so your own index is untouched. Exit code 10 from a gate reads as a failure marked
+   "needs review", since a hook has no terminal to ask on.
+
+### Operating it
+
+- **Kill it any time.** `examples/calc/crash-demo.sh` sends Ctrl-C in the middle of round 2: the
+  half-done edit stays in the workdir and `loopctl status` shows `phase: acting`. The rerun discards
+  the unverified edit and resumes with the same budgets.
+- **Human gate.** `examples/calc/demo.sh loop.approve.toml` sets `require_approval = true`: loopctl
+  shows the diff stat and asks y/N before each commit. A no discards the change.
 
 ### Sandboxing checks (brain outside, hands inside)
 

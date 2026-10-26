@@ -21,7 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -74,8 +74,8 @@ class Git:
         if _sh("git rev-parse --verify -q HEAD", workdir, 30)[0] != 0:
             raise LoopError("repository has no commits; make an initial commit first")
 
-    def _git(self, *args: str, cwd: Path | None = None, check: bool = True) -> str:
-        p = subprocess.run(["git", *args], cwd=cwd or self.workdir, text=True, capture_output=True)
+    def _git(self, *args: str, cwd: Path | None = None, check: bool = True, env: dict[str, str] | None = None) -> str:
+        p = subprocess.run(["git", *args], cwd=cwd or self.workdir, text=True, capture_output=True, env=env)
         if check and p.returncode != 0:
             raise LoopError(f"git {' '.join(args)} failed: {p.stderr.strip()}")
         return p.stdout
@@ -92,11 +92,11 @@ class Git:
         out = self._git("status", "--porcelain", "-uall", "--", ".", f":(exclude){self.rel}", cwd=self.top)
         return set(out.splitlines())
 
-    def stage(self) -> int:
+    def stage(self, env: dict[str, str] | None = None) -> int:
         """Stage all workdir changes; return lines changed (binary files count as 1)."""
-        self._git("add", "-A", "--", ".")
+        self._git("add", "-A", "--", ".", env=env)
         total = 0
-        for line in self._git("diff", "--cached", "--numstat", "--", ".").splitlines():
+        for line in self._git("diff", "--cached", "--numstat", "--", ".", env=env).splitlines():
             added, deleted, _ = line.split("\t", 2)
             total += 1 if added == "-" else int(added) + int(deleted)
         return total
@@ -132,15 +132,20 @@ class Observation:
 
 
 def observe(m: Manifest, git: Git) -> Observation:
-    """Sense actual state. Fresh-clone mode reads only committed reality, nothing cached locally."""
+    """Sense actual state. Fresh-clone mode reads only committed reality, nothing cached locally.
+
+    Checks run with PYTHONDONTWRITEBYTECODE=1: an edit in the same second that keeps the file size
+    (`a - b` -> `a + b`) looks unchanged to Python's bytecode cache, so a cache a check wrote would
+    make the next observation of an in-place workdir read stale code."""
     tmp = None
     cwd = m.workdir
     if m.fresh_clone:
         tmp, cwd = git.fresh_clone()
     try:
         passing, failing, output = [], [], {}
+        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         for c in m.checks:
-            code, out = _sh(c.run, cwd, c.timeout_s)
+            code, out = _sh(c.run, cwd, c.timeout_s, env=env)
             if code == 0:
                 passing.append(c.name)
             else:
@@ -204,6 +209,52 @@ def admit(m: Manifest, git: Git, outside_before: set[str], target: str, ask: Cal
     if m.require_approval and not ask(f"Target `{target}`, {lines} changed lines:\n{git.stat()}\nApprove commit? [y/N] "):
         return Gate(False, "approval_denied", lines)
     return Gate(True, "", lines)
+
+
+@dataclass
+class WorktreeCheck:
+    passing: list[str]
+    failing: list[str]
+    output: dict[str, str]  # tail of each failing check's output
+    admission: list[dict[str, object]]  # {"name", "ok", "detail"} per gate, max_diff_lines first
+    changed_lines: int
+
+    @property
+    def ok(self) -> bool:
+        return not self.failing and all(g["ok"] for g in self.admission)
+
+
+def check_worktree(m: Manifest, git: Git) -> WorktreeCheck:
+    """Observe uncommitted work as it is now: the sensor for agent-harness hooks (integrations/).
+
+    Every check runs in the workdir itself, ignoring `fresh_clone`, because the edits are not
+    committed yet. `max_diff_lines` and every admission gate judge the uncommitted changes, staged
+    into a throwaway copy of the index, so the user's own index is never touched. Otherwise
+    read-only: no commits, no reverts, no loop state. Exit code 10 from a gate reads as a failure
+    marked "needs review", since a hook has no terminal to ask on.
+    """
+    obs = observe(replace(m, fresh_clone=False), git)
+    fd, index = tempfile.mkstemp(prefix="loopctl-index-")
+    os.close(fd)
+    try:
+        real = git.workdir / git._git("rev-parse", "--git-path", "index").strip()
+        if real.exists():
+            shutil.copyfile(real, index)
+        env = {**os.environ, "GIT_INDEX_FILE": index, "LOOP_NAME": m.name, "LOOP_GOAL": m.goal, "LOOP_TARGET": ""}
+        lines = git.stage(env=env)
+        gates: list[dict[str, object]] = []
+        if lines > m.limits.max_diff_lines:
+            gates.append({"name": "max_diff_lines", "ok": False, "detail": f"{lines} > {m.limits.max_diff_lines} changed lines"})
+        for hook in m.admission:
+            code, out = _sh(hook.run, m.workdir, hook.timeout_s, env=env)
+            detail = "" if code == 0 else _tail(out, 500).strip() or f"exit {code}"
+            if code == ADMISSION_REVIEW:
+                detail = f"needs review: {detail}"
+            gates.append({"name": hook.name, "ok": code == 0, "detail": detail})
+        return WorktreeCheck(obs.passing, obs.failing, obs.output, gates, lines)
+    finally:
+        os.unlink(index)
+        Path(index + ".lock").unlink(missing_ok=True)
 
 
 def tty_ask(prompt: str) -> bool:

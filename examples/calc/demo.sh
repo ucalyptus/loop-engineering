@@ -5,6 +5,7 @@
 #   ./demo.sh loop.sandbox.toml   pi as the worker, checks run in throwaway containers (Docker, or INCVM_RUNTIME=container)
 #   ./demo.sh loop.jev.toml       Jev picks what to do next (needs TYPESAFE_API_KEY or TYPESAFE_ENV_FILE)
 #   ./demo.sh loop.thrash.toml    failure demo: a worker that breaks one test per fix; loopctl halts it
+#   ./demo.sh loop.shadow.toml    failure demo: a one-line unittest.py fakes every check; a false "converged"
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
@@ -12,7 +13,7 @@ manifest="${1:-loop.toml}"
 [[ -f "$here/$manifest" ]] || { echo "no such manifest: $manifest" >&2; exit 2; }
 work="$(mktemp -d)/calc"
 mkdir -p "$work"
-cp "$here"/{calc.py,test_calc.py,fix_one.py,thrash.py,incvm,loop.toml,loop.pi.toml,loop.sandbox.toml,loop.jev.toml,loop.thrash.toml} "$work"
+cp "$here"/{calc.py,test_calc.py,fix_one.py,thrash.py,shadow.py,incvm,loop.toml,loop.pi.toml,loop.sandbox.toml,loop.jev.toml,loop.thrash.toml,loop.shadow.toml} "$work"
 printf '__pycache__/\n' > "$work/.gitignore"
 git -C "$work" init -q
 git -C "$work" add -A

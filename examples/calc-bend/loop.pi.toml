@@ -1,0 +1,38 @@
+name = "calc-bend-pi"
+goal = "calc.bend satisfies every law in laws_*.bend, with machine-checked proofs in proof_*.bend."
+workdir = "."
+
+# pi writes the code AND the proofs. It learns Bend from `bend guide`.
+actor = 'pi -p "$(cat) Bend notes: run bend guide first. Write proofs in proof_<check>.bend as def Laws.<law>. Test with: bend check_<check>.bend. Never edit laws_*.bend or check_*.bend."'
+actor_timeout_s = 900
+fresh_clone = true
+
+[[checks]]
+name = "add"
+run = "bend check_add.bend --verdict"
+
+[[checks]]
+name = "mul"
+run = "bend check_mul.bend --verdict"
+
+[[checks]]
+name = "double"
+run = "bend check_double.bend --verdict"
+
+# The laws and the check entry files are the spec and the sensors: hands off.
+[[admission]]
+name = "spec-frozen"
+run = "git diff --cached --quiet -- 'laws_*.bend' 'check_*.bend'"
+
+# Allowlist, not denylist: the agent may change calc.bend and proof_*.bend, nothing else.
+# A denylist misses new files, such as a weaker copy of the laws.
+[[admission]]
+name = "allowlist"
+run = '! git diff --cached --name-only --relative | grep -vxE "calc[.]bend|proof_(add|mul|double)[.]bend"'
+
+[limits]
+max_iterations = 8
+max_diff_lines = 60
+stall_iterations = 3
+max_regressions = 2
+max_actor_seconds = 2700

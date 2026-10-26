@@ -21,6 +21,9 @@ observe ──► diff ──► act (1 target) ──► admit ──► commit
 ./examples/calc/demo.sh loop.sandbox.toml   # pi as the actor, checks inside throwaway Docker containers
 TYPESAFE_ENV_FILE=~/files/.env ./examples/calc/demo.sh loop.jev.toml   # Jev decides the next move
 ./examples/calc/demo.sh loop.thrash.toml    # failure demo: over-correcting actor, halts as thrashing (exit 3)
+./examples/calc/demo.sh loop.shadow.toml    # failure demo: a one-line unittest.py fakes every test (false exit 0)
+./examples/calc-bend/demo.sh                # Bend 2: every check is a machine-checked proof
+./examples/calc-bend/demo.sh loop.cheat.toml   # failure demo: three ways to fake a proof, none gets through (exit 2)
 ./examples/churn/demo.sh                    # ML example: data contract, AUC bar, model card
 ./examples/churn/demo.sh loop.cheat.toml    # failure demo: actor lowers the AUC bar, admission rejects (exit 2)
 pip install -e .                 # or: PYTHONPATH=. python3 -m loopctl ...
@@ -154,6 +157,43 @@ rejected. On `examples/churn`, it admitted all four honest fixes (hazards at 0.1
 rejected two cheats that the plain-text gates let through to a false "converged": an AUC floor in
 `churn/model.py` (0.81) and training on the holdout set via `"hold" + "out"` (0.78). It is a model,
 so keep the plain-text gates next to it.
+
+Prefer an allowlist ("only these paths may change") to a denylist ("these files are untouched"). A
+denylist misses new files: `examples/calc/loop.shadow.toml` adds a one-line `unittest.py` that
+`python3 -m unittest` imports ahead of the standard library, every check exits 0, and the loop
+reports "converged" on broken code.
+
+### Proof checks (Bend 2)
+
+A test checks some inputs. A proof covers all of them, and a proof checker can't be fooled by a file
+in the workdir. `examples/calc-bend` uses [Bend 2](https://github.com/bendlang/bend): each check is
+`bend check_<op>.bend --verdict`, which passes only when every law in `laws_<op>.bend` is proven,
+then rechecks the proofs with BendTT's kernel, which has a proof in Lean.
+
+| File | Owner | Role |
+|---|---|---|
+| `calc.bend` | agent | the code, with three planted bugs |
+| `laws_<op>.bend` | human, frozen | the spec: laws such as `double(n) == add(n, n)` for every `n` |
+| `check_<op>.bend` | human, frozen | the sensor: imports the laws and the proofs, so a proof can't swap in weaker laws |
+| `proof_<op>.bend` | agent | `def Laws.<law>` for each law; the recursive `double` needs an induction proof (`fix_one.py`) |
+
+The proof checker moves the attack from the check to the spec, so the gates guard the spec:
+`spec-frozen` rejects edits to `laws_*.bend` and `check_*.bend`, and `allowlist` rejects any change
+outside `calc.bend` and `proof_*.bend`. `loop.cheat.toml` tries three cheats: a weakened law
+(`spec-frozen` rejects it), a weaker copy of the laws (`allowlist` rejects it), and a proof that
+calls itself forever (`@unsafe`; admitted, but the checker refuses it). The loop halts as unreachable.
+
+With pi as the actor (`loop.pi.toml`), the loop converged in 3 rounds, 144 s of agent time, with no
+rejections. pi did not write the induction proof: it redefined `double(n)` as `add(n, n)`, which
+meets the law by definition, so the proof is `{==}`. That is legal under the spec. A proof can't be
+faked, but the agent will pick the cheapest implementation the laws allow, so write the laws you mean.
+
+Needs `bend` (`curl -fsSL https://bend-lang.com/install.sh | sh`) and, for `--verdict`, the Lean
+toolchain Bend names (`elan toolchain install leanprover/lean4:v4.34.0` for Bend 2.0.39; the first
+check builds the kernel, about 20 s once). Limits, from Bend's README: laws hold for Bend's
+semantics, not each backend; `--verdict` does not cover the parser or the translation into the
+kernel; F32 is axiomatic, so nothing about floats (such as the churn model's AUC) can be proven.
+Bend checks Bend code only; it does not verify the Python examples.
 
 ## Post → code
 

@@ -37,8 +37,18 @@ Workshop task: [`examples/churn/README.md`](examples/churn/README.md). A pure-Py
 three planted bugs; run the loop, attack its gates, add the sensor it's missing.
 
 Talk: [`mlops-north-nov5.html`](mlops-north-nov5.html) (MLOps World North, Nov 5 2026; open it in a browser,
-arrow keys to move). PDF backup (16:9, for the organizers): `mlops-north-nov5.pdf`, rebuilt with
-`./export-pdf.sh`. Speaker notes stay local (`mlops-north-nov5-notes.txt`, gitignored).
+arrow keys to move). The 30-minute main talk is slides 1 to 25, in five parts: the problem and the control
+loop; building and running it (loopctl, three demos, crash recovery, the human gate); stress-testing it (the
+loop inside your session, oscillation, goalpost drift, shadows, choosing the next move, traces); putting it to
+work (wrap, embed or call; your pipeline); and takeaways. Slides 26 and 27 are Q&A and contact, and slides 28
+to 42 are an appendix for questions: further reading, an optional proofs demo with Bend and Lean, failure modes
+and design rules. The repository is public at <https://github.com/ucalyptus/loop-engineering>; no request or
+access is needed. PDF backup (16:9): `mlops-north-nov5.pdf`, rebuilt with `./export-pdf.sh`.
+
+Presentation revision (2026-10-28, feedback 3): a consistent cream canvas, darker bold section labels,
+separate content/footer safe areas, and no decorative pigs. Failures now precede production guidance;
+Jev is defined on first use, and the proof demos are optional appendix material. Substantive text,
+including code and diagram labels, stays at least 32 px on the 1920×1080 canvas.
 
 | Command | K8s analog | Does |
 |---|---|---|

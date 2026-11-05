@@ -10,10 +10,16 @@ Failure modes from the K8s playbook and how this controller handles each:
 - Conflicting loops:    a lease file gives one controller ownership of one workdir; actor
                         changes outside the workdir halt the loop.
 - Big-bang actions:     diffs larger than `max_diff_lines` are rejected and discarded.
+- Goalpost drift:       protected files (including the manifest itself) are rejected
+                        at admission if the actor touches them.
+- Shadowed checks:      a newly added root-level file that shadows a stdlib module
+                        (e.g. a one-line `unittest.py` that exits 0) is rejected at
+                        admission, so a check cannot be faked by replacing its runner.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import shutil
@@ -104,6 +110,38 @@ class Git:
     def stat(self) -> str:
         return self._git("diff", "--cached", "--stat", "--", ".")
 
+    def staged_files(self, env: dict[str, str] | None = None) -> list[str]:
+        """Files staged in the index, as workdir-relative posix paths.
+
+        `git diff --cached` reports repo-root-relative paths, so strip the
+        workdir's prefix (``self.rel``) when the workdir is a subdirectory.
+        """
+        out = self._git("diff", "--cached", "--name-only", "--", ".", env=env)
+        prefix = "" if str(self.rel) == "." else self.rel.as_posix() + "/"
+        files = []
+        for line in out.splitlines():
+            p = line.strip()
+            if not p:
+                continue
+            if prefix and p.startswith(prefix):
+                p = p[len(prefix):]
+            files.append(p)
+        return files
+
+    def staged_added_files(self, env: dict[str, str] | None = None) -> list[str]:
+        """Newly added staged files only, as workdir-relative posix paths."""
+        out = self._git("diff", "--cached", "--name-status", "--", ".", env=env)
+        prefix = "" if str(self.rel) == "." else self.rel.as_posix() + "/"
+        files = []
+        for line in out.splitlines():
+            parts = line.split("\t")
+            if len(parts) == 2 and parts[0] == "A":
+                p = parts[1].strip()
+                if prefix and p.startswith(prefix):
+                    p = p[len(prefix):]
+                files.append(p)
+        return files
+
     def discard(self) -> None:
         self._git("reset", "-q", "--", ".", check=False)
         self._git("checkout", "-q", "HEAD", "--", ".", check=False)
@@ -159,6 +197,11 @@ def observe(m: Manifest, git: Git) -> Observation:
 
 def render_prompt(m: Manifest, obs: Observation, target: Check) -> str:
     failing = "\n".join(f"- {name}" for name in obs.failing)
+    patterns = protected_patterns(m)
+    protected_line = (
+        f"- Do not modify protected files: {', '.join(patterns)}. Changes to them are rejected.\n"
+        if patterns else ""
+    )
     return f"""You are one iteration of a reconciliation loop. Make ONE small, idempotent change.
 
 Goal (desired state): {m.goal}
@@ -174,7 +217,7 @@ Your target this iteration is ONLY check `{target.name}`:
 Rules:
 - Read the relevant code before editing. Make the smallest change that makes `{target.name}` pass.
 - Do not break checks that currently pass; your change will be reverted if you do.
-- Do not modify the checks or files outside {m.workdir}.
+{protected_line}- Do not modify the checks or files outside {m.workdir}.
 - Do not commit; the controller commits after its own gates.
 - Changes larger than {m.limits.max_diff_lines} changed lines are rejected.
 """
@@ -187,6 +230,69 @@ class Gate:
     diff_lines: int = 0
 
 
+def protected_patterns(m: Manifest) -> list[str]:
+    """User-listed protected globs, plus the manifest itself when it lives
+    in the workdir. The actor may not rewrite its own goal file, even if
+    the manifest does not list it: that is the goalpost-drift hole."""
+    patterns = list(m.protected)
+    try:
+        rel = m.path.resolve().relative_to(m.workdir.resolve())
+    except ValueError:
+        rel = None
+    if rel is not None and str(rel) != ".":
+        patterns.append(rel.as_posix())
+    return patterns
+
+
+def protected_match(rel_path: str, patterns: list[str]) -> bool:
+    """True if a workdir-relative path matches any protected glob.
+
+    A pattern matches the full path, any suffix of it (so ``test_*.py``
+    protects ``tests/test_calc.py`` as well as a root ``test_calc.py``),
+    or the bare filename. ``Path.match`` semantics are used where they
+    apply, so ``**/eval.py`` works as written.
+    """
+    path = Path(rel_path)
+    for pattern in patterns:
+        if fnmatch.fnmatch(rel_path, pattern):
+            return True
+        if fnmatch.fnmatch(path.name, pattern):
+            return True
+        if path.match(pattern):
+            return True
+        # Suffix match: "test_*.py" should also protect "tests/test_x.py".
+        for i in range(1, len(path.parts)):
+            suffix = Path(*path.parts[i:]).as_posix()
+            if fnmatch.fnmatch(suffix, pattern):
+                return True
+    return False
+
+
+def protected_violations(m: Manifest, staged: list[str]) -> list[str]:
+    """Staged files that touch protected paths, in sorted order."""
+    patterns = protected_patterns(m)
+    if not patterns:
+        return []
+    return sorted(f for f in staged if protected_match(f, patterns))
+
+
+def stdlib_shadow_files(added: list[str]) -> list[str]:
+    """Newly added root-level files whose name shadows a stdlib module.
+
+    Checks run with the workdir on ``sys.path``, so a root-level
+    ``unittest.py`` replaces the stdlib runner for every check run from
+    that directory — the shadow demo's one-line fake. Nested files are
+    not on the default path, so they are out of scope here.
+    """
+    stdlib = sys.stdlib_module_names
+    out = []
+    for f in added:
+        p = Path(f)
+        if str(p.parent) == "." and p.suffix == ".py" and p.stem in stdlib:
+            out.append(f)
+    return sorted(out)
+
+
 def admit(m: Manifest, git: Git, outside_before: set[str], target: str, ask: Callable[[str], bool]) -> Gate:
     """Admission control for a proposed change, cheapest gate first."""
     new_outside = git.outside_snapshot() - outside_before
@@ -197,6 +303,12 @@ def admit(m: Manifest, git: Git, outside_before: set[str], target: str, ask: Cal
     lines = git.stage()
     if lines > m.limits.max_diff_lines:
         return Gate(False, f"diff_too_large: {lines} > {m.limits.max_diff_lines} lines", lines)
+    violations = protected_violations(m, git.staged_files())
+    if violations:
+        return Gate(False, "protected_changed: " + ", ".join(violations), lines)
+    shadows = stdlib_shadow_files(git.staged_added_files())
+    if shadows:
+        return Gate(False, "stdlib_shadow: " + ", ".join(shadows) + " shadow stdlib modules", lines)
     env = {**os.environ, "LOOP_NAME": m.name, "LOOP_GOAL": m.goal, "LOOP_TARGET": target}
     for hook in m.admission:
         code, out = _sh(hook.run, m.workdir, hook.timeout_s, env=env)
@@ -245,6 +357,12 @@ def check_worktree(m: Manifest, git: Git) -> WorktreeCheck:
         gates: list[dict[str, object]] = []
         if lines > m.limits.max_diff_lines:
             gates.append({"name": "max_diff_lines", "ok": False, "detail": f"{lines} > {m.limits.max_diff_lines} changed lines"})
+        violations = protected_violations(m, git.staged_files(env=env))
+        gates.append({"name": "protected", "ok": not violations,
+                      "detail": ("changed protected files: " + ", ".join(violations)) if violations else ""})
+        shadows = stdlib_shadow_files(git.staged_added_files(env=env))
+        gates.append({"name": "stdlib_shadow", "ok": not shadows,
+                      "detail": ("shadow stdlib modules: " + ", ".join(shadows)) if shadows else ""})
         for hook in m.admission:
             code, out = _sh(hook.run, m.workdir, hook.timeout_s, env=env)
             detail = "" if code == 0 else _tail(out, 500).strip() or f"exit {code}"

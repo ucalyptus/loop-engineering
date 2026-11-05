@@ -61,6 +61,7 @@ class Manifest:
     fresh_clone: bool  # observe a fresh clone of HEAD instead of the working tree
     limits: Limits
     decider: Decider | None  # None => built-in rules
+    protected: tuple[str, ...] = ()  # glob patterns, workdir-relative, the actor may not change
 
 
 def _checks(raw: object, key: str) -> tuple[Check, ...]:
@@ -106,6 +107,10 @@ def load(path: str | Path) -> Manifest:
     if not workdir.is_dir():
         raise ManifestError(f"workdir does not exist: {workdir}")
 
+    protected_raw = data.get("protected", [])
+    if not isinstance(protected_raw, list) or not all(isinstance(p, str) for p in protected_raw):
+        raise ManifestError("`protected` must be a list of glob patterns (strings)")
+
     return Manifest(
         path=path,
         name=str(data["name"]),
@@ -119,6 +124,7 @@ def load(path: str | Path) -> Manifest:
         fresh_clone=bool(data.get("fresh_clone", False)),
         limits=Limits(**raw_limits),
         decider=_decider(data.get("decider")),
+        protected=tuple(protected_raw),
     )
 
 

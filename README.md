@@ -58,6 +58,7 @@ including code and diagram labels, stays at least 32 px on the 1920×1080 canvas
 | `loopctl check M [-v] [--json]` | readiness probe | checks + admission gates on uncommitted work; read-only, for harness hooks |
 | `loopctl status M` | `kubectl get -o yaml` | persisted controller state |
 | `loopctl report M` | metrics | mine traces for failure patterns |
+| `loopctl audit M` | sensor test | prove each check can detect failure: stub implementation functions to `return 0` and require the check to fail; a check that still passes is `vacuous` |
 | `loopctl reset M` | — | clear state, budgets, traces |
 
 Exit codes: `0` converged, `1` error, `2` unreachable, `3` thrashing, `4` budget exhausted,
@@ -73,6 +74,11 @@ actor = 'pi -p "$(cat)"'          # prompt arrives on stdin; "$(cat)" passes it 
 actor_timeout_s = 600
 fresh_clone = true                 # observe a fresh clone of HEAD (no stale local state)
 require_approval = false           # y/N prompt before each commit; denied without a TTY
+protected = ["test_calc.py"]       # glob patterns the actor may not change; any staged
+                                   # change to a matching file is rejected at admission.
+                                   # The manifest file itself is always protected.
+                                   # Built-in gates also reject newly added root-level files
+                                   # that shadow stdlib modules (e.g. a fake unittest.py).
 
 [[checks]]                         # desired state; order = target priority
 name = "add"

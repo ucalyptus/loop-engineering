@@ -8,6 +8,7 @@ import sys
 from collections import Counter
 from dataclasses import asdict
 
+from .audit import audit_manifest
 from .controller import ERROR, Controller, Git, LoopError, check_worktree, observe
 from .manifest import ManifestError, load
 from .store import LeaseHeld, Store
@@ -44,6 +45,20 @@ def cmd_check(args: argparse.Namespace) -> int:
     for g in r.admission:
         print(f"{'✓' if g['ok'] else '✗'} admission[{g['name']}]" + (f": {g['detail']}" if g["detail"] else ""))
     return 0 if r.ok else 1
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    """Prove each check can detect failure. Exit 1 if any check is vacuous.
+
+    ``inconclusive`` (check already failing) and ``skipped`` (nothing to
+    mutate) are warnings, not failures: the audit cannot judge those
+    checks, and saying so is the honest result.
+    """
+    results = audit_manifest(load(args.manifest))
+    marks = {"strong": "✓", "vacuous": "✗", "inconclusive": "?", "skipped": "-"}
+    for r in results:
+        print(f"{marks.get(r['verdict'], '?')} {r['name']}: {r['verdict']} — {r['detail']}")
+    return 1 if any(r["verdict"] == "vacuous" for r in results) else 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -100,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     for name, fn, help_ in (
         ("run", cmd_run, "reconcile until converged or a circuit breaker trips"),
+        ("audit", cmd_audit, "prove each check can detect failure (sensor audit)"),
         ("diff", cmd_diff, "observe once: desired vs actual"),
         ("check", cmd_check, "observe uncommitted work now: checks + admission (for harness hooks)"),
         ("status", cmd_status, "print persisted controller state"),
